@@ -13,12 +13,34 @@
     <section id="screen-home" class="screen active">
       <div class="home-shell">
         <div class="hero-frame">
-          <img src="assets/logo/wwm-logo.webp" alt="Wer wird Millionär Logo" class="hero-logo">
+          <img src="assets/logo/wwm-logo-sharp.jpg" alt="Wer wird Millionär Logo" class="hero-logo">
         </div>
         <div class="home-actions">
           <button class="btn primary" data-action="quick-demo">Demo starten</button>
           <button class="btn" data-action="new-game">Neues Spiel erstellen</button>
           <button class="btn" data-action="library">Gespeicherte Spiele</button>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="screen-game-intro" class="screen game-intro-screen">
+      <div class="game-intro-shell">
+        <div class="game-intro-visual">
+          <img src="assets/logo/wwm-logo-sharp.jpg" alt="Wer wird Millionär Logo" class="game-intro-logo">
+          <div class="intro-glow" aria-hidden="true"></div>
+        </div>
+        <div class="game-intro-card">
+          <p class="eyebrow">Wer wird Millionär?</p>
+          <h2 id="intro-game-title">Bereit für das Spiel?</h2>
+          <label class="contestant-label" for="contestant-name">Wer sitzt auf dem heissen Stuhl?</label>
+          <input id="contestant-name" class="contestant-input" type="text" maxlength="40" autocomplete="off" placeholder="Name eingeben">
+          <div id="intro-audio-status" class="intro-audio-status">Das Intro startet ...</div>
+          <div class="intro-progress"><span id="intro-progress-bar"></span></div>
+          <div class="game-intro-actions">
+            <button class="btn ghost" data-action="cancel-game-intro">Zurück</button>
+            <button class="btn primary intro-start-btn" data-action="begin-questions" id="begin-questions" disabled>Zur ersten Frage</button>
+          </div>
         </div>
       </div>
     </section>
@@ -101,9 +123,10 @@
     <section id="screen-game" class="screen game-screen">
       <header class="game-topbar">
         <div class="mini-brand">
-          <img src="assets/logo/wwm-logo.webp" alt="" class="mini-logo">
+          <img src="assets/logo/wwm-logo-sharp.jpg" alt="" class="mini-logo">
           <div>
             <strong id="game-title-display">Unterrichtsquiz</strong>
+            <small id="contestant-display" class="contestant-display"></small>
             <small id="question-progress">Frage 1 von 15</small>
           </div>
         </div>
