@@ -1,21 +1,18 @@
-# WWM Schule
+# WWM Unterrichtsquiz
 
-Unterrichtsquiz im Stil von «Wer wird Millionär?».
+Browserbasiertes Unterrichtsquiz im Stil von «Wer wird Millionär?». Die App läuft ohne Backend und speichert eigene Fragensätze lokal im Browser.
 
-## Geplant und vorbereitet
+## Funktionen
 
 - 15 Gewinnstufen
-- vier Joker: 50:50, Publikum, Telefon und Lehrerjoker
-- einfacher Fragenimport per Text, CSV oder JSON
-- zufällige Positionierung der Antworten
-- lokale Speicherung als Fallback
-- vorbereitete Supabase Anbindung für gespeicherte Spiele
-- Audio Struktur für spätere MP3 Sounds
-- Vollbild und Tastatursteuerung für den Beamer
+- zufällige Antwortpositionen bei jedem Spiel
+- 50:50, Publikumsjoker, Telefonjoker und Lehrerjoker
+- einfacher Textimport, Excel/CSV und JSON
+- Fragensätze lokal speichern, bearbeiten, duplizieren und löschen
+- Vollbildmodus und Tastatursteuerung
+- Soundtracks für Fragen, Lösungen, Joker und Gewinnstufen
 
 ## Fragenformat
-
-Am einfachsten können Fragen so eingefügt werden:
 
 ```text
 Frage: Was versteht man unter Inflation?
@@ -23,16 +20,17 @@ Richtig: Anstieg des allgemeinen Preisniveaus
 Falsch: Rückgang der Arbeitslosigkeit
 Falsch: Zunahme des realen BIP
 Falsch: Sinkende Staatsausgaben
-
-Frage: Was ist ein Substitutionsgut zu Butter?
-Richtig: Margarine
-Falsch: Brot
-Falsch: Salz
-Falsch: Milch
 ```
 
-Die Antwortpositionen A bis D werden beim Start automatisch gemischt.
+Zwischen zwei Fragen eine Leerzeile setzen. Die App mischt die vier Antwortpositionen automatisch.
 
-## Supabase
+## Tastatur
 
-Die App funktioniert zunächst lokal. Für die Cloud Speicherung werden später nur Project URL und Publishable Key ergänzt. Kein `service_role` Key gehört in dieses Repository.
+- `1` bis `4`: Antwort wählen
+- `Enter`: Antwort einloggen oder nächste Frage
+- `F`: 50:50
+- `P`: Publikumsjoker
+- `T`: Telefonjoker
+- `L`: Lehrerjoker
+
+Supabase ist in dieser Version bewusst noch nicht eingebaut.
