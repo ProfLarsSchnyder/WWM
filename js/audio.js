@@ -34,9 +34,9 @@ export function setAudioEnabled(value) {
   if (!enabled) stopAll();
   return enabled;
 }
-export function isAudioEnabled() { return enabled; }
 
 export function registerClip(name, src, options = {}) {
+  if (!name || !src) return;
   const audio = new Audio(src);
   audio.preload = "auto";
   audio.loop = Boolean(options.loop);
@@ -44,16 +44,67 @@ export function registerClip(name, src, options = {}) {
   clips.set(name, audio);
 }
 
-export async function playClip(name, { restart = true } = {}) {
+function questionIndex() {
+  const text = document.querySelector("#question-progress")?.textContent || "";
+  const match = text.match(/Frage\s+(\d+)/i);
+  return match ? Math.max(0, Number(match[1]) - 1) : 0;
+}
+
+function questionTrack(index) {
+  if (index <= 4) return "q-low";
+  if (index <= 9) return "q-mid";
+  if (index === 10) return "q-32000";
+  if (index === 11) return "q-64000";
+  if (index === 12) return "q-125000";
+  if (index === 13) return "q-500000";
+  return "q-million";
+}
+
+function resolveName(name) {
+  const index = questionIndex();
+  if (name === "question") return questionTrack(index);
+  if (name === "locked") return index === 14 ? "lock-million" : index >= 10 ? "lock-high" : null;
+  if (name === "correct") return index === 14 ? "correct-million" : index >= 10 ? "correct-high" : "correct-low";
+  if (name === "wrong") return index === 14 ? "wrong-million" : "wrong";
+  if (name === "selected" || name === "win" || name === "game-over") return null;
+  return name;
+}
+
+export async function playClip(requestedName, { restart = true } = {}) {
   if (!enabled) return;
+  const name = resolveName(requestedName);
+  if (!name) return;
   const audio = clips.get(name);
   if (!audio) return;
+
+  if (requestedName === "correct") {
+    stopClip("lock-high");
+    stopClip("lock-million");
+  }
+
+  const isJoker = requestedName.startsWith("joker-");
+  const loopToResume = isJoker && currentLoop && !currentLoop.paused ? currentLoop : null;
+  if (loopToResume) loopToResume.pause();
+
   if (restart) audio.currentTime = 0;
   try {
     await audio.play();
     if (audio.loop) currentLoop = audio;
   } catch (error) {
     console.debug(`Audio ${name} konnte nicht gestartet werden.`, error);
+  }
+
+  if (loopToResume && audio !== loopToResume) {
+    audio.addEventListener("ended", () => {
+      if (!enabled || !loopToResume) return;
+      loopToResume.play().catch(() => {});
+    }, { once: true });
+  }
+
+  if (requestedName === "correct") {
+    const index = questionIndex();
+    if (index === 4) window.setTimeout(() => playClip("safe1"), 800);
+    if (index === 9) window.setTimeout(() => playClip("safe2"), 800);
   }
 }
 
@@ -72,15 +123,6 @@ export function stopLoop() {
   currentLoop = null;
 }
 
-export function pauseLoop() {
-  currentLoop?.pause();
-}
-
-export async function resumeLoop() {
-  if (!enabled || !currentLoop) return;
-  try { await currentLoop.play(); } catch {}
-}
-
 export function stopAll() {
   for (const audio of clips.values()) {
     audio.pause();
@@ -89,12 +131,21 @@ export function stopAll() {
   currentLoop = null;
 }
 
-export function questionTrack(index) {
-  if (index <= 4) return "q-low";
-  if (index <= 9) return "q-mid";
-  if (index === 10) return "q-32000";
-  if (index === 11) return "q-64000";
-  if (index === 12) return "q-125000";
-  if (index === 13) return "q-500000";
-  return "q-million";
+export function fadeOut(name, duration = 500) {
+  const resolved = resolveName(name) || name;
+  const audio = clips.get(resolved);
+  if (!audio || audio.paused) return;
+  const startVolume = audio.volume;
+  const start = performance.now();
+  function tick(now) {
+    const progress = Math.min(1, (now - start) / duration);
+    audio.volume = startVolume * (1 - progress);
+    if (progress < 1) requestAnimationFrame(tick);
+    else {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = startVolume;
+    }
+  }
+  requestAnimationFrame(tick);
 }
