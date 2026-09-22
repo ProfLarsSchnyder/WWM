@@ -1,0 +1,46 @@
+name: Build sharp WWM logo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/.sharp_logo_chunks/**'
+      - '.github/workflows/build-sharp-logo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-logo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild sharp WebP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/logo
+          cat assets/.sharp_logo_chunks/chunk_*.txt | tr -d '\n\r' | base64 -d > assets/logo/wwm-logo-sharp.webp
+          test -s assets/logo/wwm-logo-sharp.webp
+          bytes=$(wc -c < assets/logo/wwm-logo-sharp.webp)
+          echo "Built sharp logo: ${bytes} bytes"
+          test "$bytes" -gt 25000
+          test "$(head -c 4 assets/logo/wwm-logo-sharp.webp)" = "RIFF"
+          test "$(dd if=assets/logo/wwm-logo-sharp.webp bs=1 skip=8 count=4 status=none)" = "WEBP"
+
+      - name: Commit generated asset and clean temporary chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/logo/wwm-logo-sharp.webp
+          git rm -r assets/.sharp_logo_chunks
+          git rm .github/workflows/build-sharp-logo.yml
+          git commit -m "Add sharp WWM title image" || exit 0
+          git push
