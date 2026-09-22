@@ -1,6 +1,9 @@
 import { parseSimpleText, parseCSV, parseJSON, validateQuestions, shuffleAnswers } from "./importer.js";
-import { initStorage, getBackend, listGames, getGame, saveGame, deleteGame, duplicateGame } from "./storage.js";
-import { playClip, stopAll, stopLoop } from "./audio.js";
+import { initStorage, listGames, saveGame, deleteGame, duplicateGame } from "./storage.js";
+import {
+  playClip, stopAll, stopLoop, stopClip, pauseLoop, resumeLoop,
+  setAudioEnabled, isAudioEnabled, questionTrack
+} from "./audio.js";
 
 const money = [
   "50 €", "100 €", "200 €", "300 €", "500 €",
@@ -38,6 +41,7 @@ const state = {
   selectedKey: null,
   locked: false,
   gameFinished: false,
+  pausedForJoker: false,
   jokers: { fifty: false, audience: false, phone: false, teacher: false }
 };
 
@@ -56,12 +60,11 @@ function q(question, correct, ...wrong) {
 
 function bindGlobalActions() {
   document.addEventListener("click", async event => {
-    const actionButton = event.target.closest("[data-action]");
-    if (!actionButton) return;
-    const action = actionButton.dataset.action;
-
+    const button = event.target.closest("[data-action]");
+    if (!button) return;
+    const action = button.dataset.action;
     try {
-      if (action === "home") showScreen("home");
+      if (action === "home") goHome();
       if (action === "library") await renderLibrary();
       if (action === "new-game") openEditor();
       if (action === "quick-demo") startGame({ id: "demo", title: "Demo: Volkswirtschaft", questions: demoQuestions });
@@ -71,8 +74,8 @@ function bindGlobalActions() {
       if (action === "save-game") await saveEditorGame();
       if (action === "add-question") addEditorQuestion();
       if (action === "fullscreen") toggleFullscreen();
-      if (action === "restart-game") restartGame();
       if (action === "quit-game") quitGame();
+      if (action === "toggle-audio") toggleAudio();
     } catch (error) {
       console.error(error);
       toast(error.message || "Etwas ist schiefgelaufen.", true);
@@ -81,45 +84,34 @@ function bindGlobalActions() {
 }
 
 function bindImportTabs() {
-  $$("[data-import-tab]").forEach(tab => {
-    tab.addEventListener("click", () => {
-      state.importMode = tab.dataset.importTab;
-      $$("[data-import-tab]").forEach(item => item.classList.toggle("active", item === tab));
-      $$("[data-import-pane]").forEach(pane => pane.classList.toggle("active", pane.dataset.importPane === state.importMode));
-    });
-  });
+  $$("[data-import-tab]").forEach(tab => tab.addEventListener("click", () => {
+    state.importMode = tab.dataset.importTab;
+    $$("[data-import-tab]").forEach(item => item.classList.toggle("active", item === tab));
+    $$("[data-import-pane]").forEach(pane => pane.classList.toggle("active", pane.dataset.importPane === state.importMode));
+  }));
 }
 
 function bindGameControls() {
   $("#lock-answer").addEventListener("click", lockAnswer);
   $("#next-question").addEventListener("click", nextQuestion);
-
-  $$("[data-joker]").forEach(button => {
-    button.addEventListener("click", () => useJoker(button.dataset.joker));
-  });
-
+  $$("[data-joker]").forEach(button => button.addEventListener("click", () => useJoker(button.dataset.joker)));
   $("#modal").addEventListener("click", event => {
-    if (event.target === $("#modal")) closeModal();
+    if (event.target === $("#modal") && $("#modal").dataset.persistent !== "1") closeModal();
   });
-
   document.addEventListener("keydown", event => {
     if (!$("#screen-game").classList.contains("active")) return;
     if (!$("#modal").classList.contains("hidden")) {
       if (event.key === "Escape") closeModal();
       return;
     }
-
     if (["1", "2", "3", "4"].includes(event.key) && !state.locked) {
       const key = ["a", "b", "c", "d"][Number(event.key) - 1];
-      const element = document.querySelector(`.answer[data-key="${key}"]`);
-      if (element && !element.classList.contains("removed")) element.click();
+      document.querySelector(`.answer[data-key="${key}"]`)?.click();
     }
-
     if (event.key === "Enter") {
       if (!state.locked && state.selectedKey) lockAnswer();
       else if (state.locked && !$("#next-question").classList.contains("hidden")) nextQuestion();
     }
-
     const key = event.key.toLowerCase();
     if (key === "f") useJoker("fifty");
     if (key === "p") useJoker("audience");
@@ -134,42 +126,38 @@ function showScreen(name) {
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
+function goHome() {
+  stopAll();
+  state.gameFinished = true;
+  showScreen("home");
+}
+
 async function renderLibrary() {
   showScreen("library");
   const games = await listGames();
   const list = $("#library-list");
   list.replaceChildren();
   $("#library-empty").classList.toggle("hidden", games.length > 0);
-
   for (const game of games) {
     const card = document.createElement("article");
     card.className = "game-card";
-
     const title = document.createElement("h3");
     title.textContent = game.title;
-
     const meta = document.createElement("div");
     meta.className = "game-card-meta";
     const date = game.updatedAt ? new Date(game.updatedAt).toLocaleDateString("de-CH") : "";
-    meta.textContent = `${game.questions.length} Fragen${date ? ` · zuletzt geändert ${date}` : ""}`;
-
+    meta.textContent = `${game.questions.length} Fragen${date ? ` · geändert ${date}` : ""}`;
     const actions = document.createElement("div");
     actions.className = "game-card-actions";
     actions.append(
       libraryButton("Spielen", "primary", () => startGame(game)),
       libraryButton("Bearbeiten", "", () => openEditor(game)),
-      libraryButton("Duplizieren", "", async () => {
-        await duplicateGame(game.id);
-        toast("Spiel dupliziert.");
-        await renderLibrary();
-      }),
+      libraryButton("Duplizieren", "", async () => { await duplicateGame(game.id); await renderLibrary(); }),
       libraryButton("Löschen", "", async () => {
         if (!confirm(`«${game.title}» wirklich löschen?`)) return;
-        await deleteGame(game.id);
-        await renderLibrary();
+        await deleteGame(game.id); await renderLibrary();
       })
     );
-
     card.append(title, meta, actions);
     list.append(card);
   }
@@ -187,12 +175,9 @@ function openEditor(game = null) {
   state.editorGameId = game?.id ?? null;
   state.editorCreatedAt = game?.createdAt ?? null;
   state.editorQuestions = (game?.questions ?? []).map(question => ({
-    id: question.id || crypto.randomUUID(),
-    question: question.question,
-    correct: question.correct,
-    wrong: [...question.wrong]
+    id: question.id || crypto.randomUUID(), question: question.question,
+    correct: question.correct, wrong: [...question.wrong]
   }));
-
   $("#game-title").value = game?.title ?? "";
   $("#editor-heading").textContent = game ? "Spiel bearbeiten" : "Neues Spiel";
   $("#simple-import").value = "";
@@ -206,17 +191,13 @@ function addEditorQuestion(question = q("", "", "", "", "")) {
   syncEditorFromDOM();
   state.editorQuestions.push(question);
   renderEditorQuestions();
-  requestAnimationFrame(() => {
-    const cards = $$(".question-card");
-    cards.at(-1)?.scrollIntoView({ behavior: "smooth", block: "center" });
-  });
+  requestAnimationFrame(() => $$(".question-card").at(-1)?.scrollIntoView({ behavior: "smooth", block: "center" }));
 }
 
 function renderEditorQuestions() {
   const list = $("#question-list");
   list.replaceChildren();
   $("#question-count").textContent = state.editorQuestions.length;
-
   state.editorQuestions.forEach((question, index) => {
     const fragment = $("#question-editor-template").content.cloneNode(true);
     const card = fragment.querySelector(".question-card");
@@ -224,14 +205,8 @@ function renderEditorQuestions() {
     card.querySelector(".question-number").textContent = `Frage ${index + 1}`;
     card.querySelector('[data-field="question"]').value = question.question;
     card.querySelector('[data-field="correct"]').value = question.correct;
-    card.querySelector('[data-field="wrong0"]').value = question.wrong[0] ?? "";
-    card.querySelector('[data-field="wrong1"]').value = question.wrong[1] ?? "";
-    card.querySelector('[data-field="wrong2"]').value = question.wrong[2] ?? "";
-
-    card.querySelectorAll("[data-q-action]").forEach(button => {
-      button.addEventListener("click", () => handleQuestionAction(index, button.dataset.qAction));
-    });
-
+    [0,1,2].forEach(i => card.querySelector(`[data-field="wrong${i}"]`).value = question.wrong[i] ?? "");
+    card.querySelectorAll("[data-q-action]").forEach(button => button.addEventListener("click", () => handleQuestionAction(index, button.dataset.qAction)));
     list.append(fragment);
   });
 }
@@ -251,7 +226,7 @@ function syncEditorFromDOM() {
     id: state.editorQuestions[index]?.id ?? crypto.randomUUID(),
     question: card.querySelector('[data-field="question"]').value.trim(),
     correct: card.querySelector('[data-field="correct"]').value.trim(),
-    wrong: [0, 1, 2].map(i => card.querySelector(`[data-field="wrong${i}"]`).value.trim())
+    wrong: [0,1,2].map(i => card.querySelector(`[data-field="wrong${i}"]`).value.trim())
   }));
 }
 
@@ -265,22 +240,17 @@ function importQuestions(previewOnly = false) {
   const imported = parseActiveImport();
   if (!imported.length) throw new Error("Keine Fragen erkannt.");
   if (previewOnly) return imported;
-
   syncEditorFromDOM();
-  let shouldReplace = state.editorQuestions.length === 0;
-  if (!shouldReplace) shouldReplace = confirm(`${imported.length} Fragen erkannt. OK ersetzt die bisherigen Fragen, Abbrechen hängt sie an.`);
-  state.editorQuestions = shouldReplace ? imported : [...state.editorQuestions, ...imported];
+  let replace = state.editorQuestions.length === 0;
+  if (!replace) replace = confirm(`${imported.length} Fragen erkannt. OK ersetzt die bisherigen Fragen, Abbrechen hängt sie an.`);
+  state.editorQuestions = replace ? imported : [...state.editorQuestions, ...imported];
   renderEditorQuestions();
   toast(`${imported.length} Fragen übernommen.`);
 }
 
 function previewImport() {
   const imported = importQuestions(true);
-  showModal(`
-    <h3>Import erkannt</h3>
-    <div class="joker-message">${imported.length} vollständige Fragen wurden erkannt.</div>
-    <div class="modal-actions"><button class="btn primary" data-modal="close">Schliessen</button></div>
-  `);
+  showModal(`<h3>Import erkannt</h3><div class="joker-message">${imported.length} vollständige Fragen wurden erkannt.</div><div class="modal-actions"><button class="btn primary" data-modal="close">Schliessen</button></div>`);
 }
 
 function loadExample() {
@@ -295,27 +265,16 @@ async function saveEditorGame() {
   const title = $("#game-title").value.trim();
   if (!title) throw new Error("Bitte gib dem Spiel einen Titel.");
   const questions = validateQuestions(state.editorQuestions);
-  if (!questions.length) throw new Error("Das Spiel braucht mindestens eine Frage.");
-
-  const saved = await saveGame({
-    id: state.editorGameId || crypto.randomUUID(),
-    createdAt: state.editorCreatedAt,
-    title,
-    questions
-  });
-
+  if (!questions.length) throw new Error("Das Spiel braucht mindestens eine vollständige Frage.");
+  const saved = await saveGame({ id: state.editorGameId || crypto.randomUUID(), createdAt: state.editorCreatedAt, title, questions });
   state.editorGameId = saved.id;
   state.editorCreatedAt = saved.createdAt;
-  toast(`Gespeichert, ${getBackend() === "supabase" ? "in Supabase" : "lokal im Browser"}.`);
+  toast("Spiel gespeichert.");
   await renderLibrary();
 }
 
 function startGame(game) {
-  if (!game?.questions?.length) {
-    toast("Dieses Spiel enthält keine Fragen.", true);
-    return;
-  }
-
+  if (!game?.questions?.length) return toast("Dieses Spiel enthält keine Fragen.", true);
   stopAll();
   state.game = game;
   state.gameQuestions = selectQuestions(game.questions);
@@ -328,69 +287,67 @@ function startGame(game) {
   $("#game-title-display").textContent = game.title;
   $$("[data-joker]").forEach(button => button.classList.remove("used"));
   showScreen("game");
-  renderQuestion();
+  renderMoneyLadder();
+  $("#question-text").textContent = "Bereit für die erste Frage?";
+  $("#answers").replaceChildren();
+  $("#lock-answer").classList.add("hidden");
+  $("#next-question").classList.add("hidden");
+  $("#game-status").textContent = "";
+  playClip("intro");
+  window.setTimeout(() => { stopClip("intro"); renderQuestion(); }, 1700);
 }
 
 function selectQuestions(questions) {
   const copy = questions.map(question => ({ ...question, wrong: [...question.wrong] }));
   if (copy.length <= 15) return copy;
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
+  shuffleInPlace(copy);
   return copy.slice(0, 15);
 }
 
 function renderQuestion() {
   const question = state.gameQuestions[state.currentIndex];
   if (!question) return finishGame(true);
-
+  stopLoop();
   state.selectedKey = null;
   state.locked = false;
   state.currentAnswers = shuffleAnswers(question);
-
-  $("#question-text").textContent = question.question;
+  const shell = $("#question-text");
+  shell.textContent = question.question;
+  shell.classList.remove("enter"); void shell.offsetWidth; shell.classList.add("enter");
   $("#question-progress").textContent = `Frage ${state.currentIndex + 1} von ${state.gameQuestions.length}`;
-  $("#game-status").textContent = `Aktuelle Gewinnstufe: ${money[state.currentIndex] ?? "Finale"}`;
+  $("#game-status").textContent = money[state.currentIndex] ?? "";
   $("#lock-answer").disabled = true;
   $("#lock-answer").classList.remove("hidden");
   $("#next-question").classList.add("hidden");
-
   const container = $("#answers");
   container.replaceChildren();
-
   for (const answer of state.currentAnswers) {
-    const element = document.createElement("div");
+    const element = document.createElement("button");
+    element.type = "button";
     element.className = "answer";
     element.dataset.key = answer.key;
-
     const letter = document.createElement("span");
     letter.className = "answer-letter";
     letter.textContent = `${answer.key.toUpperCase()}:`;
-
     const text = document.createElement("span");
     text.textContent = answer.text;
-
     element.append(letter, text);
     element.addEventListener("click", () => selectAnswer(answer.key));
     container.append(element);
   }
-
   renderMoneyLadder();
-  playClip("question");
+  playClip(questionTrack(state.currentIndex));
 }
 
 function selectAnswer(key) {
   if (state.locked) return;
   const target = document.querySelector(`.answer[data-key="${key}"]`);
   if (!target || target.classList.contains("removed")) return;
-
   $$(".answer").forEach(answer => answer.classList.remove("selected"));
   target.classList.add("selected");
   state.selectedKey = key;
   $("#lock-answer").disabled = false;
   $("#game-status").textContent = `Antwort ${key.toUpperCase()} ausgewählt`;
-  playClip("selected");
 }
 
 function lockAnswer() {
@@ -400,34 +357,37 @@ function lockAnswer() {
   $("#lock-answer").disabled = true;
   $("#game-status").textContent = "Antwort ist eingeloggt ...";
   stopLoop();
-  playClip("locked");
-  window.setTimeout(revealAnswer, 900);
+  let wait = 900;
+  if (state.currentIndex >= 10 && state.currentIndex < 14) { playClip("lock-high"); wait = 2600; }
+  if (state.currentIndex === 14) { playClip("lock-million"); wait = 3900; }
+  window.setTimeout(revealAnswer, wait);
 }
 
 function revealAnswer() {
+  stopClip("lock-high");
+  stopClip("lock-million");
   const correct = state.currentAnswers.find(answer => answer.correct);
   const chosen = state.currentAnswers.find(answer => answer.key === state.selectedKey);
   const correctElement = document.querySelector(`.answer[data-key="${correct.key}"]`);
   const chosenElement = document.querySelector(`.answer[data-key="${chosen.key}"]`);
-
   correctElement?.classList.add("correct");
-
   if (!chosen.correct) {
     chosenElement?.classList.remove("selected");
     chosenElement?.classList.add("wrong");
     $("#game-status").textContent = `Leider falsch. Richtig ist ${correct.key.toUpperCase()}.`;
-    playClip("wrong");
-    window.setTimeout(() => finishGame(false), 1800);
+    playClip(state.currentIndex === 14 ? "wrong-million" : "wrong");
+    window.setTimeout(() => finishGame(false), state.currentIndex === 14 ? 5200 : 2500);
     return;
   }
-
   chosenElement?.classList.remove("selected");
   $("#game-status").textContent = `Richtig, ${money[state.currentIndex]}!`;
-  playClip("correct");
+  const correctClip = state.currentIndex === 14 ? "correct-million" : state.currentIndex >= 10 ? "correct-high" : "correct-low";
+  playClip(correctClip);
+  if (state.currentIndex === 4) window.setTimeout(() => playClip("safe1"), 850);
+  if (state.currentIndex === 9) window.setTimeout(() => playClip("safe2"), 850);
   $("#lock-answer").classList.add("hidden");
-
   if (state.currentIndex >= state.gameQuestions.length - 1 || state.currentIndex >= 14) {
-    window.setTimeout(() => finishGame(true), 1500);
+    window.setTimeout(() => finishGame(true), state.currentIndex === 14 ? 5200 : 1800);
   } else {
     $("#next-question").classList.remove("hidden");
   }
@@ -435,6 +395,7 @@ function revealAnswer() {
 
 function nextQuestion() {
   if (!state.locked || state.gameFinished) return;
+  stopAll();
   state.currentIndex += 1;
   renderQuestion();
 }
@@ -442,21 +403,15 @@ function nextQuestion() {
 function renderMoneyLadder() {
   const ladder = $("#money-ladder");
   ladder.replaceChildren();
-
   for (let i = 14; i >= 0; i--) {
     const step = document.createElement("div");
     step.className = "money-step";
-    if ([4, 9, 14].includes(i)) step.classList.add("safe");
+    if ([4,9,14].includes(i)) step.classList.add("safe");
     if (i === state.currentIndex && !state.gameFinished) step.classList.add("active");
     if (i < state.currentIndex) step.classList.add("done");
-
-    const number = document.createElement("span");
-    number.className = "n";
-    number.textContent = i + 1;
-    const amount = document.createElement("span");
-    amount.textContent = money[i];
-    step.append(number, amount);
-    ladder.append(step);
+    const number = document.createElement("span"); number.className = "n"; number.textContent = i + 1;
+    const amount = document.createElement("span"); amount.textContent = money[i];
+    step.append(number, amount); ladder.append(step);
   }
 }
 
@@ -464,8 +419,9 @@ function useJoker(type) {
   if (!state.game || state.gameFinished || state.locked || state.jokers[type]) return;
   state.jokers[type] = true;
   document.querySelector(`[data-joker="${type}"]`)?.classList.add("used");
+  pauseLoop();
+  state.pausedForJoker = true;
   playClip(`joker-${type}`);
-
   if (type === "fifty") useFifty();
   if (type === "audience") useAudience();
   if (type === "phone") usePhone();
@@ -475,130 +431,93 @@ function useJoker(type) {
 function useFifty() {
   const wrongKeys = state.currentAnswers.filter(answer => !answer.correct).map(answer => answer.key);
   shuffleInPlace(wrongKeys);
-  wrongKeys.slice(0, 2).forEach(key => document.querySelector(`.answer[data-key="${key}"]`)?.classList.add("removed"));
-  $("#game-status").textContent = "50:50 Joker eingesetzt";
+  window.setTimeout(() => {
+    wrongKeys.slice(0,2).forEach(key => document.querySelector(`.answer[data-key="${key}"]`)?.classList.add("removed"));
+    $("#game-status").textContent = "50:50 Joker eingesetzt";
+    resumeAfterJoker(900);
+  }, 650);
 }
 
 function useAudience() {
   const correct = state.currentAnswers.find(answer => answer.correct);
-  const correctIndex = ["a", "b", "c", "d"].indexOf(correct.key);
+  const correctIndex = ["a","b","c","d"].indexOf(correct.key);
   const difficulty = state.currentIndex / 14;
-  const correctBoost = 52 - difficulty * 25 + Math.random() * 10;
-  const raw = [8 + Math.random() * 16, 8 + Math.random() * 16, 8 + Math.random() * 16, 8 + Math.random() * 16];
-  raw[correctIndex] += correctBoost;
-  const total = raw.reduce((sum, value) => sum + value, 0);
-  const values = raw.map(value => Math.round(value / total * 100));
-  values[correctIndex] += 100 - values.reduce((sum, value) => sum + value, 0);
-
-  const bars = values.map((value, index) => `
-    <div class="audience-col">
-      <div class="audience-value">${value}%</div>
-      <div class="audience-bar" style="height:${Math.max(8, value * 2.15)}px"></div>
-      <div class="audience-letter">${"ABCD"[index]}</div>
-    </div>
-  `).join("");
-
-  showModal(`
-    <h3>Publikumsjoker</h3>
-    <div class="audience-chart">${bars}</div>
-    <div class="modal-actions"><button class="btn primary" data-modal="close">Zurück zur Frage</button></div>
-  `);
+  const boost = 56 - difficulty * 28 + Math.random() * 8;
+  const raw = [8+Math.random()*16,8+Math.random()*16,8+Math.random()*16,8+Math.random()*16];
+  raw[correctIndex] += boost;
+  const total = raw.reduce((a,b) => a+b,0);
+  const values = raw.map(v => Math.round(v / total * 100));
+  values[correctIndex] += 100 - values.reduce((a,b) => a+b,0);
+  const bars = values.map((value,index) => `<div class="audience-col"><div class="audience-value">${value}%</div><div class="audience-bar" style="height:${Math.max(8,value*2.15)}px"></div><div class="audience-letter">${"ABCD"[index]}</div></div>`).join("");
+  window.setTimeout(() => showModal(`<h3>Publikumsjoker</h3><div class="audience-chart">${bars}</div><div class="modal-actions"><button class="btn primary" data-modal="close">Zurück zur Frage</button></div>`), 450);
 }
 
 function usePhone() {
   const correct = state.currentAnswers.find(answer => answer.correct);
   const wrong = state.currentAnswers.filter(answer => !answer.correct);
-  const reliability = Math.max(.48, .84 - state.currentIndex * .023);
-  const guess = Math.random() < reliability ? correct : wrong[Math.floor(Math.random() * wrong.length)];
-  const confidence = guess.correct ? Math.round(64 + Math.random() * 28) : Math.round(46 + Math.random() * 24);
-
-  showModal(`
-    <h3>Telefonjoker</h3>
-    <div class="joker-message">«Ich würde auf <strong style="color:#ff9c2f">${guess.key.toUpperCase()}</strong> gehen. Ich bin ungefähr zu <strong>${confidence}%</strong> sicher.»</div>
-    <div class="modal-actions"><button class="btn primary" data-modal="close">Danke!</button></div>
-  `);
+  const reliability = Math.max(.48,.84-state.currentIndex*.023);
+  const guess = Math.random() < reliability ? correct : wrong[Math.floor(Math.random()*wrong.length)];
+  const confidence = guess.correct ? Math.round(64+Math.random()*28) : Math.round(46+Math.random()*24);
+  window.setTimeout(() => showModal(`<h3>Telefonjoker</h3><div class="joker-message">«Ich würde auf <strong style="color:#ff9d2f">${guess.key.toUpperCase()}</strong> gehen. Ich bin ungefähr zu <strong>${confidence}%</strong> sicher.»</div><div class="modal-actions"><button class="btn primary" data-modal="close">Danke!</button></div>`), 350);
 }
 
 function useTeacher() {
-  showModal(`
-    <div class="teacher-screen">
-      <div class="teacher-badge">L</div>
-      <h3>Lehrerjoker</h3>
-      <div class="joker-message">Das Spiel ist pausiert. Die Lehrperson darf jetzt einen mündlichen Hinweis geben.</div>
-      <div class="modal-actions"><button class="btn primary" data-modal="close">Hinweis erhalten, weiterspielen</button></div>
-    </div>
-  `);
+  window.setTimeout(() => showModal(`<div class="teacher-screen"><div class="teacher-badge">L</div><h3>Lehrerjoker</h3><div class="joker-message">Die Lehrperson darf jetzt einen mündlichen Hinweis geben.</div><div class="modal-actions"><button class="btn primary" data-modal="close">Weiterspielen</button></div></div>`), 250);
+}
+
+function resumeAfterJoker(delay = 0) {
+  window.setTimeout(() => {
+    state.pausedForJoker = false;
+    resumeLoop();
+  }, delay);
 }
 
 function finishGame(won) {
   if (state.gameFinished) return;
   state.gameFinished = true;
-  stopAll();
-
+  stopLoop();
   let amount = "0 €";
-  if (won) {
-    amount = money[Math.min(state.currentIndex, 14)];
-  } else if (state.currentIndex >= 10) {
-    amount = money[9];
-  } else if (state.currentIndex >= 5) {
-    amount = money[4];
-  }
-
+  if (won) amount = money[Math.min(state.currentIndex,14)];
+  else if (state.currentIndex >= 10) amount = money[9];
+  else if (state.currentIndex >= 5) amount = money[4];
   const title = won ? "Geschafft!" : "Spiel beendet";
-  const text = won
-    ? `Du hast ${amount} erreicht.`
-    : `Du gehst mit ${amount} nach Hause.`;
-
-  showModal(`
-    <h3>${title}</h3>
-    <div class="joker-message">${text}</div>
-    <div class="modal-actions">
-      <button class="btn" data-modal="restart">Noch einmal</button>
-      <button class="btn primary" data-modal="home">Zum Start</button>
-    </div>
-  `, { persistent: true });
-  playClip(won ? "win" : "game-over");
+  const text = won ? `Du hast ${amount} erreicht.` : `Du gehst mit ${amount} nach Hause.`;
+  showModal(`<img src="assets/logo/wwm-logo.webp" alt="" class="end-logo"><h3>${title}</h3><div class="joker-message">${text}</div><div class="modal-actions"><button class="btn" data-modal="restart">Noch einmal</button><button class="btn primary" data-modal="home">Zum Start</button></div>`, { persistent: true });
 }
 
-function restartGame() {
-  if (state.game) startGame(state.game);
-}
-
+function restartGame() { if (state.game) startGame(state.game); }
 function quitGame() {
   if (!confirm("Spiel wirklich beenden?")) return;
-  stopAll();
-  state.gameFinished = true;
-  showScreen("home");
+  stopAll(); state.gameFinished = true; playClip("outro"); showScreen("home");
 }
 
 function showModal(html, { persistent = false } = {}) {
-  const modal = $("#modal");
-  const content = $("#modal-content");
-  content.innerHTML = html;
-  modal.classList.remove("hidden");
-  modal.dataset.persistent = persistent ? "1" : "0";
-
-  content.querySelectorAll("[data-modal]").forEach(button => {
-    button.addEventListener("click", () => {
-      const action = button.dataset.modal;
-      if (action === "close") closeModal();
-      if (action === "restart") { closeModal(true); restartGame(); }
-      if (action === "home") { closeModal(true); showScreen("home"); }
-    });
-  });
+  const modal = $("#modal"); const content = $("#modal-content");
+  content.innerHTML = html; modal.classList.remove("hidden"); modal.dataset.persistent = persistent ? "1" : "0";
+  content.querySelectorAll("[data-modal]").forEach(button => button.addEventListener("click", () => {
+    const action = button.dataset.modal;
+    if (action === "close") closeModal();
+    if (action === "restart") { closeModal(true); restartGame(); }
+    if (action === "home") { closeModal(true); stopAll(); playClip("outro"); showScreen("home"); }
+  }));
 }
 
 function closeModal(force = false) {
   const modal = $("#modal");
   if (!force && modal.dataset.persistent === "1") return;
-  modal.classList.add("hidden");
-  modal.dataset.persistent = "0";
-  $("#modal-content").replaceChildren();
+  modal.classList.add("hidden"); modal.dataset.persistent = "0"; $("#modal-content").replaceChildren();
+  if (state.pausedForJoker) resumeAfterJoker(80);
 }
 
 function toggleFullscreen() {
   if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
   else document.exitFullscreen?.();
+}
+
+function toggleAudio() {
+  const enabled = setAudioEnabled(!isAudioEnabled());
+  $("#audio-toggle").textContent = enabled ? "🔊" : "🔇";
+  if (enabled && $("#screen-game").classList.contains("active") && !state.gameFinished && !state.locked) playClip(questionTrack(state.currentIndex));
 }
 
 function shuffleInPlace(array) {
@@ -610,11 +529,9 @@ function shuffleInPlace(array) {
 }
 
 function toast(message, error = false) {
-  const existing = document.querySelector(".toast");
-  existing?.remove();
+  document.querySelector(".toast")?.remove();
   const element = document.createElement("div");
   element.className = `toast${error ? " error" : ""}`;
-  element.textContent = message;
-  document.body.append(element);
-  window.setTimeout(() => element.remove(), 3200);
+  element.textContent = message; document.body.append(element);
+  window.setTimeout(() => element.remove(), 3000);
 }
