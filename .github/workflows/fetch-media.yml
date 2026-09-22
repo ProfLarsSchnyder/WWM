@@ -1,0 +1,69 @@
+name: Fetch WWM media
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fetch-media.yml'
+      - 'assets/.logo_chunks/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-media:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build logo from supplied image data
+        shell: bash
+        run: |
+          mkdir -p assets/logo assets/audio
+          cat assets/.logo_chunks/*.txt | base64 -d > assets/logo/wwm-logo.webp
+
+      - name: Download audio cues
+        shell: bash
+        run: |
+          set -euo pipefail
+          get() { curl -L --fail --retry 3 --silent --show-error "$1" -o "assets/audio/$2"; }
+          BASE='https://downloads.khinsider.com/game-soundtracks/album/who-wants-to-be-a-millionaire-the-album'
+          get "$BASE/01%20Main%20Theme.mp3" intro.mp3
+          get "$BASE/11%20%24100-%241%2C000%20Questions.mp3" question-low.mp3
+          get "$BASE/29%20%2416%2C000%20Question.mp3" question-mid.mp3
+          get "$BASE/34%20%2432%2C000%20Question.mp3" question-32000.mp3
+          get "$BASE/39%20%2464%2C000%20Question.mp3" question-64000.mp3
+          get "$BASE/44%20%24125%2C000%20Question.mp3" question-125000.mp3
+          get "$BASE/54%20%24500%2C000%20Question.mp3" question-500000.mp3
+          get "$BASE/59%20%241%2C000%2C000%20Question.mp3" question-million.mp3
+          get "$BASE/35%20%2432%2C000%20Final%20Answer-.mp3" final-answer-high.mp3
+          get "$BASE/60%20%241%2C000%2C000%20Final%20Answer-.mp3" final-answer-million.mp3
+          get "$BASE/17%20%242%2C000%20Win.mp3" correct-low.mp3
+          get "$BASE/37%20%2432%2C000%20Win.mp3" correct-high.mp3
+          get "$BASE/62%20%241%2C000%2C000%20Win.mp3" correct-million.mp3
+          get "$BASE/36%20%2432%2C000%20Lose.mp3" wrong.mp3
+          get "$BASE/61%20%241%2C000%2C000%20Lose.mp3" wrong-million.mp3
+          get "$BASE/12%20Win%20%241%2C000.mp3" safe-1.mp3
+          get "$BASE/32%20%2416%2C000%20Win.mp3" safe-2.mp3
+          get "$BASE/67%2050-50.mp3" joker-5050.mp3
+          get "$BASE/68%20Ask%20The%20Audience.mp3" joker-audience.mp3
+          get "$BASE/66%20Phone-A-Friend.mp3" joker-phone.mp3
+          get "$BASE/65%20Lifeline%20Pings.mp3" lifeline-ping.mp3
+          get "$BASE/63%20Closing%20Theme.mp3" outro.mp3
+
+      - name: Commit media assets
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf assets/.logo_chunks
+          git add -A assets
+          if git diff --cached --quiet; then
+            echo "Media already up to date"
+            exit 0
+          fi
+          git commit -m "Add WWM logo and audio assets"
+          git push
