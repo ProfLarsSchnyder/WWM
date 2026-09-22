@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#05051f">
+  <title>Wer wird Millionär? Unterrichtsquiz</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <main id="app">
+    <section id="screen-home" class="screen active">
+      <div class="home-card">
+        <div class="logo-stage" aria-label="Wer wird Millionär?">
+          <div class="logo-orbit orbit-a"></div>
+          <div class="logo-orbit orbit-b"></div>
+          <div class="logo-orbit orbit-c"></div>
+          <div class="logo-core">
+            <span>WER WIRD</span>
+            <strong>MILLIONÄR?</strong>
+          </div>
+        </div>
+        <p class="eyebrow">Unterrichtsquiz</p>
+        <h1>Bereit für die nächste Frage?</h1>
+        <div class="home-actions">
+          <button class="btn primary" data-action="new-game">Neues Spiel erstellen</button>
+          <button class="btn" data-action="library">Gespeicherte Spiele</button>
+          <button class="btn" data-action="quick-demo">Demo starten</button>
+        </div>
+        <p class="hint">Fragen können per einfachem Text, CSV oder JSON importiert werden. Die Antwortpositionen werden beim Spiel automatisch gemischt.</p>
+      </div>
+    </section>
+
+    <section id="screen-library" class="screen">
+      <header class="page-head">
+        <button class="btn ghost" data-action="home">← Start</button>
+        <div>
+          <p class="eyebrow">Meine Spiele</p>
+          <h2>Gespeicherte Fragensätze</h2>
+        </div>
+        <button class="btn primary" data-action="new-game">Neues Spiel</button>
+      </header>
+      <div id="library-list" class="game-grid"></div>
+      <div id="library-empty" class="empty-state hidden">
+        <h3>Noch keine Spiele gespeichert</h3>
+        <p>Erstelle dein erstes Quiz und speichere es. Bis Supabase verbunden ist, wird lokal im Browser gespeichert.</p>
+        <button class="btn primary" data-action="new-game">Spiel erstellen</button>
+      </div>
+    </section>
+
+    <section id="screen-editor" class="screen">
+      <header class="page-head">
+        <button class="btn ghost" data-action="home">← Start</button>
+        <div>
+          <p class="eyebrow">Editor</p>
+          <h2 id="editor-heading">Neues Spiel</h2>
+        </div>
+        <div class="head-actions">
+          <button class="btn" data-action="preview-import">Import prüfen</button>
+          <button class="btn primary" data-action="save-game">Speichern</button>
+        </div>
+      </header>
+
+      <div class="editor-layout">
+        <section class="panel editor-panel">
+          <label class="field-label" for="game-title">Titel des Spiels</label>
+          <input id="game-title" class="text-input" type="text" placeholder="z. B. VWL Angebot und Nachfrage">
+
+          <div class="import-tabs" role="tablist">
+            <button class="tab active" data-import-tab="simple">Einfacher Text</button>
+            <button class="tab" data-import-tab="csv">CSV / Excel</button>
+            <button class="tab" data-import-tab="json">JSON</button>
+          </div>
+
+          <div class="import-pane active" data-import-pane="simple">
+            <p class="microcopy">Einfach Frage, richtige Antwort und drei falsche Antworten einfügen. Leerzeile zwischen zwei Fragen.</p>
+            <textarea id="simple-import" class="big-input" spellcheck="false" placeholder="Frage: Was versteht man unter Inflation?&#10;Richtig: Anstieg des allgemeinen Preisniveaus&#10;Falsch: Rückgang der Arbeitslosigkeit&#10;Falsch: Zunahme des realen BIP&#10;Falsch: Sinkende Staatsausgaben"></textarea>
+          </div>
+
+          <div class="import-pane" data-import-pane="csv">
+            <p class="microcopy">Spalten: Frage, Richtig, Falsch 1, Falsch 2, Falsch 3. Du kannst Zeilen direkt aus Excel einfügen.</p>
+            <textarea id="csv-import" class="big-input" spellcheck="false" placeholder="Frage\tRichtig\tFalsch 1\tFalsch 2\tFalsch 3"></textarea>
+          </div>
+
+          <div class="import-pane" data-import-pane="json">
+            <p class="microcopy">Unterstützt eine Liste mit frage, richtig und drei falschen Antworten oder a, b, c, d plus richtig.</p>
+            <textarea id="json-import" class="big-input" spellcheck="false" placeholder='[{"frage":"...","richtig":"...","falsch":["...","...","..."]}]'></textarea>
+          </div>
+
+          <div class="editor-actions">
+            <button class="btn" data-action="load-example">Beispiel einsetzen</button>
+            <button class="btn primary" data-action="import-questions">Fragen übernehmen</button>
+          </div>
+        </section>
+
+        <section class="panel question-panel">
+          <div class="panel-title-row">
+            <div>
+              <p class="eyebrow">Fragen</p>
+              <h3><span id="question-count">0</span> Fragen im Spiel</h3>
+            </div>
+            <button class="btn small" data-action="add-question">+ Frage</button>
+          </div>
+          <div id="question-list" class="question-list"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="screen-game" class="screen game-screen">
+      <header class="game-topbar">
+        <div class="mini-brand">
+          <div class="mini-logo">WWM</div>
+          <div>
+            <strong id="game-title-display">Unterrichtsquiz</strong>
+            <small id="question-progress">Frage 1 von 15</small>
+          </div>
+        </div>
+        <div class="top-controls">
+          <button class="btn small" data-action="restart-game">Neu starten</button>
+          <button class="btn small" data-action="fullscreen">Vollbild</button>
+          <button class="btn small ghost" data-action="quit-game">Beenden</button>
+        </div>
+      </header>
+
+      <div class="game-layout">
+        <section class="quiz-stage">
+          <div class="studio-glow" aria-hidden="true"></div>
+          <div class="question-shell" id="question-text">Frage</div>
+          <div class="answers" id="answers"></div>
+          <div class="answer-controls">
+            <button id="lock-answer" class="btn primary" disabled>Antwort einloggen</button>
+            <button id="next-question" class="btn hidden">Nächste Frage</button>
+          </div>
+          <div id="game-status" class="game-status"></div>
+        </section>
+
+        <aside class="game-sidebar">
+          <div class="joker-row">
+            <button class="joker" data-joker="fifty" title="50:50">50:50</button>
+            <button class="joker" data-joker="audience" title="Publikumsjoker">👥</button>
+            <button class="joker" data-joker="phone" title="Telefonjoker">☎</button>
+            <button class="joker teacher" data-joker="teacher" title="Lehrerjoker">L</button>
+          </div>
+          <div id="money-ladder" class="money-ladder"></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div id="modal-content" class="modal-card"></div>
+  </div>
+
+  <template id="question-editor-template">
+    <article class="question-card">
+      <div class="question-card-head">
+        <strong class="question-number"></strong>
+        <div class="question-tools">
+          <button class="icon-button" data-q-action="up" title="Nach oben">↑</button>
+          <button class="icon-button" data-q-action="down" title="Nach unten">↓</button>
+          <button class="icon-button danger" data-q-action="delete" title="Löschen">×</button>
+        </div>
+      </div>
+      <label>Frage<textarea data-field="question"></textarea></label>
+      <label class="correct-label">Richtige Antwort<input data-field="correct" type="text"></label>
+      <div class="wrong-grid">
+        <label>Falsch 1<input data-field="wrong0" type="text"></label>
+        <label>Falsch 2<input data-field="wrong1" type="text"></label>
+        <label>Falsch 3<input data-field="wrong2" type="text"></label>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
