@@ -1,29 +1,497 @@
 import { shuffleAnswers } from './importer.js';
-import { playCue,startLoop,stopAll,stopLoop,stopForeground,pauseLoop,resumeLoop,setAudioEnabled,isAudioEnabled,questionTrack } from './audio.js';
+import {
+  playCue, startLoop, stopAll, stopLoop, stopForeground,
+  pauseLoop, resumeLoop, setAudioEnabled, isAudioEnabled,
+  isForegroundPlaying, questionTrack
+} from './audio.js';
 import { S,$,$$,money,sleep,screen,shuffleInPlace,toast } from './state-v2.js';
 
-function choose(qs){const a=qs.map(x=>({...x,wrong:[...x.wrong]}));return a.length<=15?a:shuffleInPlace(a).slice(0,15);}
-export function startGame(game){if(!game?.questions?.length)return toast('Dieses Spiel enthält keine Fragen.',true);stopAll();const seq=++S.seq;Object.assign(S,{game,qs:choose(game.questions),i:0,answers:[],sel:null,locked:false,finished:false,jokerBusy:false,name:'',introReady:false,jokers:{fifty:false,audience:false,phone:false,teacher:false}});$$('[data-joker]').forEach(x=>x.classList.remove('used'));$('#intro-game-title').textContent=game.title;$('#contestant-name').value='';$('#intro-audio-status').textContent='Das Intro läuft ...';$('#intro-progress-bar').style.width='0%';$('#begin-questions').disabled=true;$('#begin-questions').classList.remove('ready');screen('game-intro');$('#contestant-name').focus();runIntro(seq);}
-async function runIntro(seq){const t0=performance.now(),dur=31320,t=setInterval(()=>{if(seq!==S.seq)return clearInterval(t);$('#intro-progress-bar').style.width=`${Math.min(96,(performance.now()-t0)/dur*100)}%`;},180);await playCue('intro');clearInterval(t);if(seq!==S.seq||!$('#screen-game-intro').classList.contains('active'))return;$('#intro-progress-bar').style.width='100%';$('#intro-audio-status').textContent='Intro beendet. Der heisse Stuhl wartet.';S.introReady=true;$('#begin-questions').disabled=false;$('#begin-questions').classList.add('ready');}
-export function cancelIntro(){++S.seq;stopAll();S.finished=true;screen('home');}
-export function beginQuestions(){if(!S.game||!S.introReady)return;S.name=$('#contestant-name').value.trim()||'Kandidat/in';$('#game-title-display').textContent=S.game.title;$('#contestant-display').textContent=S.name;screen('game');renderQuestion();}
+function choose(questions) {
+  const copy = questions.map(question => ({ ...question, wrong: [...question.wrong] }));
+  return copy.length <= 15 ? copy : shuffleInPlace(copy).slice(0,15);
+}
 
-function renderQuestion(){const x=S.qs[S.i];if(!x)return finish(true);stopAll();S.sel=null;S.locked=false;S.answers=shuffleAnswers(x);$('#question-text').textContent=x.question;$('#question-progress').textContent=`Frage ${S.i+1} von ${S.qs.length}`;$('#game-status').textContent=money[S.i];$('#lock-answer').disabled=true;$('#lock-answer').classList.remove('hidden');$('#next-question').classList.add('hidden');const box=$('#answers');box.replaceChildren();for(const a of S.answers){const b=document.createElement('button');b.className='answer';b.dataset.key=a.key;b.innerHTML=`<span class="answer-letter">${a.key.toUpperCase()}:</span><span></span>`;b.lastElementChild.textContent=a.text;b.onclick=()=>select(a.key);box.append(b);}ladder();startLoop(questionTrack(S.i));}
-function select(k){if(S.locked)return;const b=document.querySelector(`.answer[data-key="${k}"]`);if(!b||b.classList.contains('removed'))return;$$('.answer').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');S.sel=k;$('#lock-answer').disabled=false;$('#game-status').textContent=`Antwort ${k.toUpperCase()} ausgewählt`;}
-export async function lockAnswer(){if(!S.sel||S.locked)return;S.locked=true;const seq=S.seq;$$('.answer').forEach(x=>x.classList.add('locked'));$('#lock-answer').disabled=true;$('#game-status').textContent='Antwort ist eingeloggt ...';if(S.i>=10){stopLoop();await playCue(S.i===14?'lock-million':'lock-high');}else await sleep(1300);if(seq===S.seq&&!S.finished)reveal(seq);}
-async function reveal(seq){if(seq!==S.seq||S.finished)return;stopLoop();stopForeground();const c=S.answers.find(a=>a.correct),ch=S.answers.find(a=>a.key===S.sel),ce=document.querySelector(`.answer[data-key="${c.key}"]`),he=document.querySelector(`.answer[data-key="${ch.key}"]`);ce?.classList.add('correct');if(!ch.correct){he?.classList.remove('selected');he?.classList.add('wrong');$('#game-status').textContent=`Leider falsch. Richtig ist ${c.key.toUpperCase()}.`;await playCue(S.i===14?'wrong-million':'wrong');if(seq===S.seq)finish(false);return;}he?.classList.remove('selected');$('#game-status').textContent=`Richtig, ${money[S.i]}!`;$('#lock-answer').classList.add('hidden');let cue='correct-low';if(S.i===4)cue='safe1';else if(S.i===9)cue='safe2';else if(S.i>=10&&S.i<14)cue='correct-high';else if(S.i===14)cue='correct-million';await playCue(cue);if(seq!==S.seq||S.finished)return;if(S.i>=S.qs.length-1||S.i>=14)finish(true);else $('#next-question').classList.remove('hidden');}
-export function nextQuestion(){if(!S.locked||S.finished)return;stopAll();S.i++;renderQuestion();}
-function ladder(){const b=$('#money-ladder');b.replaceChildren();for(let i=14;i>=0;i--){const d=document.createElement('div');d.className='money-step';if([4,9,14].includes(i))d.classList.add('safe');if(i===S.i&&!S.finished)d.classList.add('active');if(i<S.i)d.classList.add('done');d.innerHTML=`<span class="n">${i+1}</span><span>${money[i]}</span>`;b.append(d);}}
+export function startGame(game) {
+  if (!game?.questions?.length) return toast('Dieses Spiel enthält keine Fragen.', true);
 
-export async function useJoker(type){if(!S.game||S.finished||S.locked||S.jokerBusy||S.jokers[type])return;S.jokers[type]=true;document.querySelector(`[data-joker="${type}"]`)?.classList.add('used');pauseLoop();S.jokerBusy=true;const seq=S.seq;if(type==='fifty')await fifty(seq);if(type==='audience')await audience(seq);if(type==='phone')await phone(seq);if(type==='teacher')await teacher(seq);}
-async function fifty(seq){const wrong=shuffleInPlace(S.answers.filter(a=>!a.correct).map(a=>a.key));const cue=playCue('joker-fifty');await sleep(isAudioEnabled()?1500:200);if(seq!==S.seq)return;wrong.slice(0,2).forEach(k=>document.querySelector(`.answer[data-key="${k}"]`)?.classList.add('removed'));$('#game-status').textContent='50:50 Joker eingesetzt';await cue;if(seq!==S.seq)return;S.jokerBusy=false;resumeLoop();}
-async function audience(seq){const c=S.answers.find(a=>a.correct),ci=['a','b','c','d'].indexOf(c.key),raw=[8+Math.random()*16,8+Math.random()*16,8+Math.random()*16,8+Math.random()*16];raw[ci]+=56-S.i/14*28+Math.random()*8;const total=raw.reduce((a,b)=>a+b,0),v=raw.map(x=>Math.round(x/total*100));v[ci]+=100-v.reduce((a,b)=>a+b,0);modal(`<div class="joker-phase"><div class="phase-icon">👥</div><h3>Publikumsjoker</h3><div class="phase-copy">Das Publikum stimmt jetzt ab ...</div><div class="audience-wait"><span></span><span></span><span></span><span></span></div></div>`,true);const cue=playCue('joker-audience');await Promise.race([cue,sleep(isAudioEnabled()?16000:600)]);if(seq!==S.seq)return;const bars=v.map((n,i)=>`<div class="audience-col"><div class="audience-value">${n}%</div><div class="audience-bar" style="height:${Math.max(8,n*2.15)}px"></div><div class="audience-letter">${'ABCD'[i]}</div></div>`).join('');modal(`<h3>Das Publikum hat gewählt</h3><div class="audience-chart">${bars}</div><div class="phase-copy">Die Auflösung läuft ...</div>`,true);await cue;if(seq===S.seq)modal(`<h3>Das Publikum hat gewählt</h3><div class="audience-chart">${bars}</div><div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div>`,true);}
-async function phone(seq){const c=S.answers.find(a=>a.correct),wrong=S.answers.filter(a=>!a.correct),guess=Math.random()<Math.max(.5,.86-S.i*.022)?c:wrong[Math.floor(Math.random()*wrong.length)],others=S.answers.filter(a=>a.key!==guess.key),other=others[Math.floor(Math.random()*others.length)],advice=guess.correct?`«${other.key.toUpperCase()} würde ich eher streichen. <strong>${guess.key.toUpperCase()}</strong> passt für mich deutlich besser. Darauf würde ich gehen.»`:`«Ich schwanke noch etwas. ${other.key.toUpperCase()} überzeugt mich nicht. Wenn ich mich festlegen müsste, würde ich <strong>${guess.key.toUpperCase()}</strong> nehmen.»`;modal(`<div class="joker-phase"><div class="phase-icon">☎</div><h3>Telefonjoker</h3><div class="phone-words"><em>Der Joker hört sich die Frage an und denkt nach ...</em></div></div>`,true);const cue=playCue('joker-phone');await Promise.race([cue,sleep(isAudioEnabled()?8500:350)]);if(seq!==S.seq)return;modal(`<div class="joker-phase"><div class="phase-icon">☎</div><h3>Telefonjoker</h3><div class="phone-words"><em>«Einen Moment ... ich würde zuerst zwei Möglichkeiten ausschliessen.»</em></div></div>`,true);await Promise.race([cue,sleep(isAudioEnabled()?14500:350)]);if(seq!==S.seq)return;modal(`<div class="joker-phase"><div class="phase-icon">☎</div><h3>Der Tipp</h3><div class="phone-words"><em>${advice}</em></div></div>`,true);await cue;if(seq===S.seq)modal(`<div class="joker-phase"><div class="phase-icon">☎</div><h3>Der Tipp</h3><div class="phone-words"><em>${advice}</em></div><div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div></div>`,true);}
-async function teacher(seq){modal(`<div class="teacher-screen"><div class="teacher-badge">L</div><h3>Lehrerjoker</h3><div class="joker-message">Der Lehrerjoker wird aktiviert ...</div></div>`,true);await playCue('joker-teacher');if(seq===S.seq)modal(`<div class="teacher-screen"><div class="teacher-badge">L</div><h3>Lehrerjoker</h3><div class="joker-message">Jetzt ist die Lehrperson dran und darf einen mündlichen Hinweis geben.</div><div class="modal-actions"><button class="btn primary" data-modal="close-joker">Weiterspielen</button></div></div>`,true);}
+  stopAll();
+  setAudioEnabled(true);
+  $('#audio-toggle').textContent = '🔊';
+  const seq = ++S.seq;
+  Object.assign(S, {
+    game,
+    qs: choose(game.questions),
+    i: 0,
+    answers: [],
+    sel: null,
+    locked: false,
+    finished: false,
+    jokerBusy: false,
+    name: '',
+    introReady: false,
+    jokers: { fifty:false, audience:false, phone:false, teacher:false }
+  });
 
-function closeJoker(){stopForeground();S.jokerBusy=false;closeModal(true);if(!S.locked&&!S.finished)resumeLoop();}
-function finish(won){if(S.finished)return;S.finished=true;stopAll();let amount='0 €';if(won)amount=money[Math.min(S.i,14)];else if(S.i>=10)amount=money[9];else if(S.i>=5)amount=money[4];modal(`<img src="assets/logo/wwm-logo-sharp.jpg" alt="" class="end-logo"><h3>${won?'Geschafft!':'Spiel beendet'}</h3><div class="joker-message">${won?`Du hast ${amount} erreicht.`:`Du gehst mit ${amount} nach Hause.`}</div><div class="modal-actions"><button class="btn" data-modal="restart">Noch einmal</button><button class="btn primary" data-modal="home">Zum Start</button></div>`,true);}
-export function quit(){if(!confirm('Spiel wirklich beenden?'))return;++S.seq;stopAll();S.finished=true;screen('home');}
-function modal(html,persistent=false){const m=$('#modal'),c=$('#modal-content');c.innerHTML=html;m.classList.remove('hidden');m.dataset.persistent=persistent?'1':'0';c.querySelectorAll('[data-modal]').forEach(b=>b.onclick=()=>{const a=b.dataset.modal;if(a==='close')closeModal();if(a==='close-joker')closeJoker();if(a==='restart'){closeModal(true);startGame(S.game);}if(a==='home'){++S.seq;closeModal(true);stopAll();screen('home');}});}
-export function closeModal(force=false){const m=$('#modal');if(!force&&m.dataset.persistent==='1')return;m.classList.add('hidden');m.dataset.persistent='0';$('#modal-content').replaceChildren();}
-export function toggleAudio(){const on=setAudioEnabled(!isAudioEnabled());$('#audio-toggle').textContent=on?'🔊':'🔇';if(on&&$('#screen-game').classList.contains('active')&&!S.finished&&!S.locked&&!S.jokerBusy)startLoop(questionTrack(S.i));}
+  $$('[data-joker]').forEach(button => button.classList.remove('used'));
+  $('#intro-game-title').textContent = game.title;
+  $('#contestant-name').value = '';
+  $('#intro-audio-status').textContent = 'Das Intro läuft ...';
+  $('#intro-progress-bar').style.width = '0%';
+  $('#begin-questions').disabled = true;
+  $('#begin-questions').classList.remove('ready');
+  screen('game-intro');
+  $('#contestant-name').focus();
+  runIntro(seq);
+}
+
+async function runIntro(seq) {
+  const durationMs = 31320;
+  const startedAt = performance.now();
+  const progressTimer = window.setInterval(() => {
+    if (seq !== S.seq) return window.clearInterval(progressTimer);
+    const progress = Math.min(98, (performance.now() - startedAt) / durationMs * 100);
+    $('#intro-progress-bar').style.width = `${progress}%`;
+  }, 150);
+
+  const result = await playCue('intro');
+  window.clearInterval(progressTimer);
+
+  if (seq !== S.seq || !$('#screen-game-intro').classList.contains('active')) return;
+  $('#intro-progress-bar').style.width = '100%';
+  $('#intro-audio-status').textContent = result.reason === 'ended'
+    ? 'Intro beendet. Der heisse Stuhl wartet.'
+    : 'Bereit. Der heisse Stuhl wartet.';
+  S.introReady = true;
+  $('#begin-questions').disabled = false;
+  $('#begin-questions').classList.add('ready');
+}
+
+export function cancelIntro() {
+  ++S.seq;
+  stopAll();
+  S.finished = true;
+  screen('home');
+}
+
+export function beginQuestions() {
+  if (!S.game || !S.introReady) return;
+  stopAll();
+  S.name = $('#contestant-name').value.trim() || 'Kandidat/in';
+  $('#game-title-display').textContent = S.game.title;
+  $('#contestant-display').textContent = S.name;
+  screen('game');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const question = S.qs[S.i];
+  if (!question) return finish(true);
+
+  stopAll();
+  S.sel = null;
+  S.locked = false;
+  S.answers = shuffleAnswers(question);
+
+  const questionElement = $('#question-text');
+  questionElement.textContent = question.question;
+  questionElement.classList.remove('enter');
+  void questionElement.offsetWidth;
+  questionElement.classList.add('enter');
+
+  $('#question-progress').textContent = `Frage ${S.i + 1} von ${S.qs.length}`;
+  $('#game-status').textContent = money[S.i];
+  $('#lock-answer').disabled = true;
+  $('#lock-answer').classList.remove('hidden');
+  $('#next-question').classList.add('hidden');
+
+  const box = $('#answers');
+  box.replaceChildren();
+  for (const answer of S.answers) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'answer';
+    button.dataset.key = answer.key;
+    const letter = document.createElement('span');
+    letter.className = 'answer-letter';
+    letter.textContent = `${answer.key.toUpperCase()}:`;
+    const text = document.createElement('span');
+    text.textContent = answer.text;
+    button.append(letter, text);
+    button.onclick = () => select(answer.key);
+    box.append(button);
+  }
+
+  ladder();
+  startLoop(questionTrack(S.i));
+}
+
+function select(key) {
+  if (S.locked || S.jokerBusy) return;
+  const button = document.querySelector(`.answer[data-key="${key}"]`);
+  if (!button || button.classList.contains('removed')) return;
+  $$('.answer').forEach(answer => answer.classList.remove('selected'));
+  button.classList.add('selected');
+  S.sel = key;
+  $('#lock-answer').disabled = false;
+  $('#game-status').textContent = `Antwort ${key.toUpperCase()} ausgewählt`;
+}
+
+export async function lockAnswer() {
+  if (!S.sel || S.locked || S.jokerBusy) return;
+  S.locked = true;
+  const seq = S.seq;
+  $$('.answer').forEach(answer => answer.classList.add('locked'));
+  $('#lock-answer').disabled = true;
+  $('#game-status').textContent = 'Antwort ist eingeloggt ...';
+
+  if (S.i >= 10) {
+    stopLoop();
+    await playCue(S.i === 14 ? 'lock-million' : 'lock-high');
+  } else {
+    await sleep(1250);
+  }
+
+  if (seq === S.seq && !S.finished) await reveal(seq);
+}
+
+async function reveal(seq) {
+  if (seq !== S.seq || S.finished) return;
+
+  stopLoop();
+  stopForeground();
+
+  const correct = S.answers.find(answer => answer.correct);
+  const chosen = S.answers.find(answer => answer.key === S.sel);
+  const correctElement = document.querySelector(`.answer[data-key="${correct.key}"]`);
+  const chosenElement = document.querySelector(`.answer[data-key="${chosen.key}"]`);
+  correctElement?.classList.add('correct');
+
+  if (!chosen.correct) {
+    chosenElement?.classList.remove('selected');
+    chosenElement?.classList.add('wrong');
+    $('#game-status').textContent = `Leider falsch. Richtig ist ${correct.key.toUpperCase()}.`;
+    await playCue(S.i === 14 ? 'wrong-million' : 'wrong');
+    if (seq === S.seq) finish(false);
+    return;
+  }
+
+  chosenElement?.classList.remove('selected');
+  $('#game-status').textContent = `Richtig, ${money[S.i]}!`;
+  $('#lock-answer').classList.add('hidden');
+
+  let cue = 'correct-low';
+  if (S.i === 4) cue = 'safe1';
+  else if (S.i === 9) cue = 'safe2';
+  else if (S.i >= 10 && S.i < 14) cue = 'correct-high';
+  else if (S.i === 14) cue = 'correct-million';
+
+  await playCue(cue);
+  if (seq !== S.seq || S.finished) return;
+
+  if (S.i >= S.qs.length - 1 || S.i >= 14) finish(true);
+  else $('#next-question').classList.remove('hidden');
+}
+
+export function nextQuestion() {
+  if (!S.locked || S.finished || S.jokerBusy) return;
+  stopAll();
+  S.i += 1;
+  renderQuestion();
+}
+
+function ladder() {
+  const box = $('#money-ladder');
+  box.replaceChildren();
+  for (let index = 14; index >= 0; index--) {
+    const step = document.createElement('div');
+    step.className = 'money-step';
+    if ([4,9,14].includes(index)) step.classList.add('safe');
+    if (index === S.i && !S.finished) step.classList.add('active');
+    if (index < S.i) step.classList.add('done');
+    step.innerHTML = `<span class="n">${index + 1}</span><span>${money[index]}</span>`;
+    box.append(step);
+  }
+}
+
+export async function useJoker(type) {
+  if (!S.game || S.finished || S.locked || S.jokerBusy || S.jokers[type]) return;
+  S.jokers[type] = true;
+  document.querySelector(`[data-joker="${type}"]`)?.classList.add('used');
+  pauseLoop();
+  S.jokerBusy = true;
+  const seq = S.seq;
+
+  if (type === 'fifty') await fifty(seq);
+  if (type === 'audience') await audience(seq);
+  if (type === 'phone') await phone(seq);
+  if (type === 'teacher') await teacher(seq);
+}
+
+async function fifty(seq) {
+  const wrongKeys = shuffleInPlace(S.answers.filter(answer => !answer.correct).map(answer => answer.key));
+  const cue = playCue('joker-fifty');
+  await sleep(isAudioEnabled() ? 1350 : 150);
+  if (seq !== S.seq) return;
+
+  const removedKeys = wrongKeys.slice(0,2);
+  removedKeys.forEach(key => {
+    document.querySelector(`.answer[data-key="${key}"]`)?.classList.add('removed');
+  });
+  if (removedKeys.includes(S.sel)) {
+    S.sel = null;
+    $$('.answer').forEach(answer => answer.classList.remove('selected'));
+    $('#lock-answer').disabled = true;
+  }
+  $('#game-status').textContent = '50:50 Joker eingesetzt';
+
+  await cue;
+  if (seq !== S.seq) return;
+  S.jokerBusy = false;
+  await resumeLoop();
+}
+
+function activeAnswerKeys() {
+  return S.answers.filter(answer => {
+    const element = document.querySelector(`.answer[data-key="${answer.key}"]`);
+    return !element?.classList.contains('removed');
+  }).map(answer => answer.key);
+}
+
+function audienceValues() {
+  const correct = S.answers.find(answer => answer.correct);
+  const keys = ['a','b','c','d'];
+  const active = new Set(activeAnswerKeys());
+  const raw = keys.map(key => active.has(key) ? 8 + Math.random() * 16 : 0);
+  const correctIndex = keys.indexOf(correct.key);
+  raw[correctIndex] += 56 - S.i / 14 * 28 + Math.random() * 8;
+  const total = raw.reduce((a,b) => a+b,0);
+  const values = raw.map(value => value ? Math.round(value / total * 100) : 0);
+  values[correctIndex] += 100 - values.reduce((a,b) => a+b,0);
+  return values;
+}
+
+function audienceBars(values) {
+  return values.map((value,index) => `
+    <div class="audience-col">
+      <div class="audience-value">${value}%</div>
+      <div class="audience-bar" style="height:${Math.max(8,value*2.15)}px"></div>
+      <div class="audience-letter">${'ABCD'[index]}</div>
+    </div>`).join('');
+}
+
+async function audience(seq) {
+  const values = audienceValues();
+  const bars = audienceBars(values);
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">👥</div>
+    <h3>Publikumsjoker</h3>
+    <div class="phase-copy">Die Frage geht ans Publikum.</div>
+    <div class="audience-wait"><span></span><span></span><span></span><span></span></div>
+  </div>`, true);
+
+  const cue = playCue('joker-audience');
+  await sleep(isAudioEnabled() ? 4200 : 180);
+  if (seq !== S.seq) return;
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">👥</div>
+    <h3>Publikumsjoker</h3>
+    <div class="phase-copy">Jetzt wird abgestimmt ...</div>
+    <div class="audience-wait"><span></span><span></span><span></span><span></span></div>
+  </div>`, true);
+
+  await sleep(isAudioEnabled() && isForegroundPlaying() ? 15800 : 180);
+  if (seq !== S.seq) return;
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">👥</div>
+    <h3>Publikumsjoker</h3>
+    <div class="phase-copy">Die letzten Stimmen kommen rein ...</div>
+    <div class="audience-wait closing"><span></span><span></span><span></span><span></span></div>
+  </div>`, true);
+
+  await sleep(isAudioEnabled() && isForegroundPlaying() ? 7600 : 180);
+  if (seq !== S.seq) return;
+
+  modal(`<h3>Das Publikum hat gewählt</h3>
+    <div class="audience-chart">${bars}</div>
+    <div class="phase-copy">Das Ergebnis steht fest.</div>`, true);
+
+  await cue;
+  if (seq !== S.seq) return;
+
+  modal(`<h3>Das Publikum hat gewählt</h3>
+    <div class="audience-chart">${bars}</div>
+    <div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div>`, true);
+}
+
+function phoneAdvice() {
+  const active = new Set(activeAnswerKeys());
+  const available = S.answers.filter(answer => active.has(answer.key));
+  const correct = available.find(answer => answer.correct) || S.answers.find(answer => answer.correct);
+  const wrong = available.filter(answer => !answer.correct);
+  const reliability = Math.max(.50, .86 - S.i * .022);
+  const guess = !wrong.length || Math.random() < reliability ? correct : wrong[Math.floor(Math.random() * wrong.length)];
+  const alternatives = available.filter(answer => answer.key !== guess.key);
+  const other = alternatives[Math.floor(Math.random() * alternatives.length)] || guess;
+
+  const confident = [
+    `«Mein erster Gedanke ist <strong>${guess.key.toUpperCase()}</strong>. Je länger ich darüber nachdenke, desto besser passt diese Antwort.»`,
+    `«${other.key.toUpperCase()} würde ich eher streichen. Für mich spricht deutlich mehr für <strong>${guess.key.toUpperCase()}</strong>.»`,
+    `«Ich würde mich festlegen: <strong>${guess.key.toUpperCase()}</strong>. Das erscheint mir von den vier Möglichkeiten am schlüssigsten.»`
+  ];
+  const unsure = [
+    `«Ich schwanke noch etwas. ${other.key.toUpperCase()} überzeugt mich nicht, spontan würde ich <strong>${guess.key.toUpperCase()}</strong> nehmen.»`,
+    `«Ganz sicher bin ich nicht, aber mein Bauchgefühl geht zu <strong>${guess.key.toUpperCase()}</strong>.»`,
+    `«Ich kann es nicht garantieren. Wenn ich mich entscheiden müsste, wäre es <strong>${guess.key.toUpperCase()}</strong>.»`
+  ];
+  const pool = guess.correct ? confident : unsure;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+async function phone(seq) {
+  const advice = phoneAdvice();
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">💬</div>
+    <h3>Telefonjoker</h3>
+    <div class="phone-words"><em>Die Frage wird weitergegeben. Der Joker hört genau zu ...</em></div>
+  </div>`, true);
+
+  const cue = playCue('joker-phone');
+  await sleep(isAudioEnabled() ? 4800 : 180);
+  if (seq !== S.seq) return;
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">💬</div>
+    <h3>Telefonjoker</h3>
+    <div class="phone-words"><em>«Okay ... gib mir einen Moment. Ich sortiere die vier Möglichkeiten.»</em></div>
+  </div>`, true);
+
+  await sleep(isAudioEnabled() && isForegroundPlaying() ? 10400 : 180);
+  if (seq !== S.seq) return;
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">💬</div>
+    <h3>Telefonjoker</h3>
+    <div class="phone-words"><em>«Zwei Antworten wirken auf mich eher unwahrscheinlich. Ich denke noch kurz nach ...»</em></div>
+  </div>`, true);
+
+  await sleep(isAudioEnabled() && isForegroundPlaying() ? 11800 : 180);
+  if (seq !== S.seq) return;
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">💬</div>
+    <h3>Der Tipp</h3>
+    <div class="phone-words"><em>${advice}</em></div>
+  </div>`, true);
+
+  await cue;
+  if (seq !== S.seq) return;
+
+  modal(`<div class="joker-phase">
+    <div class="phase-icon">💬</div>
+    <h3>Der Tipp</h3>
+    <div class="phone-words"><em>${advice}</em></div>
+    <div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div>
+  </div>`, true);
+}
+
+async function teacher(seq) {
+  modal(`<div class="teacher-screen">
+    <div class="teacher-badge">L</div>
+    <h3>Lehrerjoker</h3>
+    <div class="joker-message">Der Lehrerjoker wird aktiviert ...</div>
+  </div>`, true);
+
+  await playCue('joker-teacher');
+  if (seq !== S.seq) return;
+
+  modal(`<div class="teacher-screen">
+    <div class="teacher-badge">L</div>
+    <h3>Lehrerjoker</h3>
+    <div class="joker-message">Jetzt ist die Lehrperson dran und darf einen mündlichen Hinweis geben.</div>
+    <div class="modal-actions"><button class="btn primary" data-modal="close-joker">Weiterspielen</button></div>
+  </div>`, true);
+}
+
+async function closeJoker() {
+  stopForeground();
+  S.jokerBusy = false;
+  closeModal(true);
+  if (!S.locked && !S.finished) await resumeLoop();
+}
+
+function finish(won) {
+  if (S.finished) return;
+  S.finished = true;
+  stopAll();
+
+  let amount = '0 €';
+  if (won) amount = money[Math.min(S.i,14)];
+  else if (S.i >= 10) amount = money[9];
+  else if (S.i >= 5) amount = money[4];
+
+  modal(`<img src="assets/logo/wwm-logo-sharp.webp" alt="" class="end-logo">
+    <h3>${won ? 'Geschafft!' : 'Spiel beendet'}</h3>
+    <div class="joker-message">${won ? `${S.name} hat ${amount} erreicht.` : `${S.name} geht mit ${amount} nach Hause.`}</div>
+    <div class="modal-actions">
+      <button class="btn" data-modal="restart">Noch einmal</button>
+      <button class="btn primary" data-modal="home">Zum Start</button>
+    </div>`, true);
+
+  playCue('outro');
+}
+
+export function quit() {
+  if (!confirm('Spiel wirklich beenden?')) return;
+  ++S.seq;
+  stopAll();
+  S.finished = true;
+  S.jokerBusy = false;
+  screen('home');
+}
+
+function modal(html, persistent = false) {
+  const backdrop = $('#modal');
+  const content = $('#modal-content');
+  content.innerHTML = html;
+  backdrop.classList.remove('hidden');
+  backdrop.dataset.persistent = persistent ? '1' : '0';
+
+  content.querySelectorAll('[data-modal]').forEach(button => {
+    button.onclick = () => {
+      const action = button.dataset.modal;
+      if (action === 'close') closeModal();
+      if (action === 'close-joker') closeJoker();
+      if (action === 'restart') {
+        closeModal(true);
+        startGame(S.game);
+      }
+      if (action === 'home') {
+        ++S.seq;
+        closeModal(true);
+        stopAll();
+        S.jokerBusy = false;
+        screen('home');
+      }
+    };
+  });
+}
+
+export function closeModal(force = false) {
+  const backdrop = $('#modal');
+  if (!force && backdrop.dataset.persistent === '1') return;
+  backdrop.classList.add('hidden');
+  backdrop.dataset.persistent = '0';
+  $('#modal-content').replaceChildren();
+}
+
+export function toggleAudio() {
+  const on = setAudioEnabled(!isAudioEnabled());
+  $('#audio-toggle').textContent = on ? '🔊' : '🔇';
+  if (on && $('#screen-game').classList.contains('active') && !S.finished && !S.locked && !S.jokerBusy) {
+    startLoop(questionTrack(S.i));
+  }
+}
