@@ -1,5 +1,6 @@
 const clips = new Map();
 let currentLoop = null;
+let pausedLoop = null;
 let enabled = true;
 
 const AUDIO = {
@@ -35,6 +36,8 @@ export function setAudioEnabled(value) {
   return enabled;
 }
 
+export function isAudioEnabled() { return enabled; }
+
 export function registerClip(name, src, options = {}) {
   if (!name || !src) return;
   const audio = new Audio(src);
@@ -44,13 +47,7 @@ export function registerClip(name, src, options = {}) {
   clips.set(name, audio);
 }
 
-function questionIndex() {
-  const text = document.querySelector("#question-progress")?.textContent || "";
-  const match = text.match(/Frage\s+(\d+)/i);
-  return match ? Math.max(0, Number(match[1]) - 1) : 0;
-}
-
-function questionTrack(index) {
+export function questionTrack(index) {
   if (index <= 4) return "q-low";
   if (index <= 9) return "q-mid";
   if (index === 10) return "q-32000";
@@ -60,51 +57,16 @@ function questionTrack(index) {
   return "q-million";
 }
 
-function resolveName(name) {
-  const index = questionIndex();
-  if (name === "question") return questionTrack(index);
-  if (name === "locked") return index === 14 ? "lock-million" : index >= 10 ? "lock-high" : null;
-  if (name === "correct") return index === 14 ? "correct-million" : index >= 10 ? "correct-high" : "correct-low";
-  if (name === "wrong") return index === 14 ? "wrong-million" : "wrong";
-  if (name === "selected" || name === "win" || name === "game-over") return null;
-  return name;
-}
-
-export async function playClip(requestedName, { restart = true } = {}) {
+export async function playClip(name, { restart = true } = {}) {
   if (!enabled) return;
-  const name = resolveName(requestedName);
-  if (!name) return;
   const audio = clips.get(name);
   if (!audio) return;
-
-  if (requestedName === "correct") {
-    stopClip("lock-high");
-    stopClip("lock-million");
-  }
-
-  const isJoker = requestedName.startsWith("joker-");
-  const loopToResume = isJoker && currentLoop && !currentLoop.paused ? currentLoop : null;
-  if (loopToResume) loopToResume.pause();
-
   if (restart) audio.currentTime = 0;
   try {
     await audio.play();
     if (audio.loop) currentLoop = audio;
   } catch (error) {
     console.debug(`Audio ${name} konnte nicht gestartet werden.`, error);
-  }
-
-  if (loopToResume && audio !== loopToResume) {
-    audio.addEventListener("ended", () => {
-      if (!enabled || !loopToResume) return;
-      loopToResume.play().catch(() => {});
-    }, { once: true });
-  }
-
-  if (requestedName === "correct") {
-    const index = questionIndex();
-    if (index === 4) window.setTimeout(() => playClip("safe1"), 800);
-    if (index === 9) window.setTimeout(() => playClip("safe2"), 800);
   }
 }
 
@@ -114,13 +76,31 @@ export function stopClip(name) {
   audio.pause();
   audio.currentTime = 0;
   if (audio === currentLoop) currentLoop = null;
+  if (audio === pausedLoop) pausedLoop = null;
+}
+
+export function pauseLoop() {
+  if (!currentLoop || currentLoop.paused) return;
+  pausedLoop = currentLoop;
+  currentLoop.pause();
+}
+
+export async function resumeLoop() {
+  if (!enabled || !pausedLoop) return;
+  const audio = pausedLoop;
+  pausedLoop = null;
+  currentLoop = audio;
+  try { await audio.play(); } catch (error) { console.debug("Fragemusik konnte nicht fortgesetzt werden.", error); }
 }
 
 export function stopLoop() {
-  if (!currentLoop) return;
-  currentLoop.pause();
-  currentLoop.currentTime = 0;
+  const audio = currentLoop || pausedLoop;
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
   currentLoop = null;
+  pausedLoop = null;
 }
 
 export function stopAll() {
@@ -129,11 +109,11 @@ export function stopAll() {
     audio.currentTime = 0;
   }
   currentLoop = null;
+  pausedLoop = null;
 }
 
 export function fadeOut(name, duration = 500) {
-  const resolved = resolveName(name) || name;
-  const audio = clips.get(resolved);
+  const audio = clips.get(name);
   if (!audio || audio.paused) return;
   const startVolume = audio.volume;
   const start = performance.now();
@@ -145,6 +125,7 @@ export function fadeOut(name, duration = 500) {
       audio.pause();
       audio.currentTime = 0;
       audio.volume = startVolume;
+      if (audio === currentLoop) currentLoop = null;
     }
   }
   requestAnimationFrame(tick);
