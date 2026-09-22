@@ -3,6 +3,10 @@ let currentLoop = null;
 let pausedLoop = null;
 let enabled = true;
 
+// Wichtig: Die ersten MP3-Dateien im Repo waren fehlerhafte Platzhalter.
+// Die Versionskennung verhindert, dass Browser diese alten Antworten weiter aus dem Cache laden.
+const ASSET_VERSION = "2026-09-22-v3";
+
 const AUDIO = {
   intro: ["assets/audio/intro.mp3", { volume: .78 }],
   "q-low": ["assets/audio/question-low.mp3", { loop: true, volume: .42 }],
@@ -38,12 +42,18 @@ export function setAudioEnabled(value) {
 
 export function isAudioEnabled() { return enabled; }
 
+function versionedSrc(src) {
+  const separator = src.includes("?") ? "&" : "?";
+  return `${src}${separator}v=${encodeURIComponent(ASSET_VERSION)}`;
+}
+
 export function registerClip(name, src, options = {}) {
   if (!name || !src) return;
-  const audio = new Audio(src);
-  audio.preload = "auto";
+  const audio = new Audio();
+  audio.preload = "metadata";
   audio.loop = Boolean(options.loop);
   audio.volume = typeof options.volume === "number" ? options.volume : 1;
+  audio.src = versionedSrc(src);
   clips.set(name, audio);
 }
 
@@ -57,16 +67,43 @@ export function questionTrack(index) {
   return "q-million";
 }
 
+// Wird direkt aus einem echten Klick heraus aufgerufen. Damit ist Audio auch in
+// Browsern mit strenger Autoplay-Regel für die nachfolgenden Spielsounds freigeschaltet.
+export async function unlockAudio() {
+  if (!enabled) return true;
+  const audio = clips.get("intro");
+  if (!audio) return false;
+  const oldVolume = audio.volume;
+  try {
+    audio.volume = 0.001;
+    audio.currentTime = 0;
+    await audio.play();
+    audio.pause();
+    audio.currentTime = 0;
+    audio.volume = oldVolume;
+    return true;
+  } catch (error) {
+    audio.volume = oldVolume;
+    console.warn("Audio konnte vom Browser noch nicht freigeschaltet werden.", error);
+    return false;
+  }
+}
+
 export async function playClip(name, { restart = true } = {}) {
-  if (!enabled) return;
+  if (!enabled) return false;
   const audio = clips.get(name);
-  if (!audio) return;
+  if (!audio) {
+    console.warn(`Unbekannter Audio-Clip: ${name}`);
+    return false;
+  }
   if (restart) audio.currentTime = 0;
   try {
     await audio.play();
     if (audio.loop) currentLoop = audio;
+    return true;
   } catch (error) {
-    console.debug(`Audio ${name} konnte nicht gestartet werden.`, error);
+    console.warn(`Audio ${name} konnte nicht gestartet werden.`, error);
+    return false;
   }
 }
 
@@ -90,7 +127,7 @@ export async function resumeLoop() {
   const audio = pausedLoop;
   pausedLoop = null;
   currentLoop = audio;
-  try { await audio.play(); } catch (error) { console.debug("Fragemusik konnte nicht fortgesetzt werden.", error); }
+  try { await audio.play(); } catch (error) { console.warn("Fragemusik konnte nicht fortgesetzt werden.", error); }
 }
 
 export function stopLoop() {
