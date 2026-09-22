@@ -1,20 +1,28 @@
-# Audio
+# Audio-Zuordnung
 
-Hier kommen später die MP3 Dateien hinein.
+Die erste Version ist auf folgende Audiodateien vorbereitet:
 
-Vorgesehene Ereignisse:
+- `intro.mp3`
+- `question-low.mp3`
+- `question-mid.mp3`
+- `question-32000.mp3`
+- `question-64000.mp3`
+- `question-125000.mp3`
+- `question-500000.mp3`
+- `question-million.mp3`
+- `final-answer-high.mp3`
+- `final-answer-million.mp3`
+- `correct-low.mp3`
+- `correct-high.mp3`
+- `correct-million.mp3`
+- `wrong.mp3`
+- `wrong-million.mp3`
+- `safe-1.mp3`
+- `safe-2.mp3`
+- `joker-5050.mp3`
+- `joker-audience.mp3`
+- `joker-phone.mp3`
+- `lifeline-ping.mp3`
+- `outro.mp3`
 
-- intro.mp3
-- question.mp3
-- selected.mp3
-- locked.mp3
-- correct.mp3
-- wrong.mp3
-- joker-fifty.mp3
-- joker-audience.mp3
-- joker-phone.mp3
-- joker-teacher.mp3
-- win.mp3
-- game-over.mp3
-
-Die Zuordnung erfolgt zentral in `js/audio.js`.
+Die Zuordnung und Lautstärken werden zentral in `js/audio.js` gesteuert.
