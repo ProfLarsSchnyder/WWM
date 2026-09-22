@@ -5,8 +5,9 @@ let foreground = null;
 let enabled = true;
 let unlocked = false;
 let foregroundToken = 0;
+let foregroundDone = null;
 
-const ASSET_VERSION = "2026-09-22-v5";
+const ASSET_VERSION = "2026-09-23-v7";
 
 const AUDIO = {
   intro: ["assets/audio/intro.mp3", { volume: .82 }],
@@ -18,19 +19,19 @@ const AUDIO = {
   "q-500000": ["assets/audio/question-500000.mp3", { loop: true, volume: .46 }],
   "q-million": ["assets/audio/question-million.mp3", { loop: true, volume: .48 }],
   "lock-high": ["assets/audio/final-answer-high.mp3", { volume: .78 }],
-  "lock-million": ["assets/audio/final-answer-million.mp3", { volume: .8 }],
+  "lock-million": ["assets/audio/final-answer-million.mp3", { volume: .80 }],
   "correct-low": ["assets/audio/correct-low.mp3", { volume: .88 }],
-  "correct-high": ["assets/audio/correct-high.mp3", { volume: .9 }],
+  "correct-high": ["assets/audio/correct-high.mp3", { volume: .90 }],
   "correct-million": ["assets/audio/correct-million.mp3", { volume: .92 }],
   wrong: ["assets/audio/wrong.mp3", { volume: .88 }],
   "wrong-million": ["assets/audio/wrong-million.mp3", { volume: .92 }],
   safe1: ["assets/audio/safe-1.mp3", { volume: .88 }],
   safe2: ["assets/audio/safe-2.mp3", { volume: .88 }],
   "joker-fifty": ["assets/audio/joker-5050.mp3", { volume: .84 }],
-  "joker-audience": ["assets/audio/joker-audience.mp3", { volume: .8 }],
-  "joker-phone": ["assets/audio/joker-phone.mp3", { volume: .8 }],
+  "joker-audience": ["assets/audio/joker-audience.mp3", { volume: .80 }],
+  "joker-phone": ["assets/audio/joker-phone.mp3", { volume: .80 }],
   "joker-teacher": ["assets/audio/lifeline-ping.mp3", { volume: .86 }],
-  outro: ["assets/audio/outro.mp3", { volume: .8 }]
+  outro: ["assets/audio/outro.mp3", { volume: .80 }]
 };
 
 for (const [name, [src, options]] of Object.entries(AUDIO)) registerClip(name, src, options);
@@ -101,29 +102,40 @@ function stopAudioElement(audio) {
   try { audio.currentTime = 0; } catch {}
 }
 
+function settleForeground(reason = "stopped") {
+  if (!foregroundDone) return;
+  const done = foregroundDone;
+  foregroundDone = null;
+  done(reason);
+}
+
 export async function startLoop(name, { restart = true } = {}) {
   if (!enabled) return false;
+  if (foreground && !foreground.paused) return false;
   const audio = clips.get(name);
   if (!audio) return false;
+
   if (currentLoop && currentLoop !== audio) stopAudioElement(currentLoop);
   if (pausedLoop && pausedLoop !== audio) stopAudioElement(pausedLoop);
   pausedLoop = null;
   currentLoop = audio;
   if (restart) audio.currentTime = 0;
+
   try {
     await audio.play();
     unlocked = true;
     return true;
   } catch (error) {
     console.warn(`Fragemusik ${name} konnte nicht gestartet werden.`, error);
+    if (currentLoop === audio) currentLoop = null;
     return false;
   }
 }
 
-export async function playCue(name, { restart = true, replace = true } = {}) {
-  if (!enabled) return { ended: false, disabled: true };
+export function playCue(name, { restart = true, replace = true } = {}) {
+  if (!enabled) return Promise.resolve({ ended: false, reason: "disabled" });
   const audio = clips.get(name);
-  if (!audio) return { ended: false, missing: true };
+  if (!audio) return Promise.resolve({ ended: false, reason: "missing" });
 
   if (replace) stopForeground();
   const token = ++foregroundToken;
@@ -138,10 +150,14 @@ export async function playCue(name, { restart = true, replace = true } = {}) {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
       if (foreground === audio && token === foregroundToken) foreground = null;
+      if (foregroundDone === cancel) foregroundDone = null;
       resolve({ ended: reason === "ended", reason });
     };
+    const cancel = reason => done(reason || "stopped");
     const onEnded = () => done("ended");
     const onError = () => done("error");
+
+    foregroundDone = cancel;
     audio.addEventListener("ended", onEnded, { once: true });
     audio.addEventListener("error", onError, { once: true });
     audio.play().then(() => { unlocked = true; }).catch(error => {
@@ -151,14 +167,13 @@ export async function playCue(name, { restart = true, replace = true } = {}) {
   });
 }
 
-export function playClip(name, options = {}) {
-  return playCue(name, options);
-}
+export function playClip(name, options = {}) { return playCue(name, options); }
 
 export function stopForeground() {
   foregroundToken += 1;
   if (foreground) stopAudioElement(foreground);
   foreground = null;
+  settleForeground("stopped");
 }
 
 export function stopClip(name) {
@@ -167,20 +182,18 @@ export function stopClip(name) {
   stopAudioElement(audio);
   if (audio === currentLoop) currentLoop = null;
   if (audio === pausedLoop) pausedLoop = null;
-  if (audio === foreground) {
-    foregroundToken += 1;
-    foreground = null;
-  }
+  if (audio === foreground) stopForeground();
 }
 
 export function pauseLoop() {
-  if (!currentLoop || currentLoop.paused) return;
+  if (!currentLoop || currentLoop.paused) return false;
   pausedLoop = currentLoop;
   currentLoop.pause();
+  return true;
 }
 
 export async function resumeLoop() {
-  if (!enabled || !pausedLoop || foreground) return false;
+  if (!enabled || !pausedLoop || (foreground && !foreground.paused)) return false;
   const audio = pausedLoop;
   pausedLoop = null;
   currentLoop = audio;
@@ -206,6 +219,7 @@ export function stopAll() {
   currentLoop = null;
   pausedLoop = null;
   foreground = null;
+  settleForeground("stopped");
 }
 
 export function isForegroundPlaying() {
