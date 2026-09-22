@@ -2,10 +2,11 @@ const clips = new Map();
 let currentLoop = null;
 let pausedLoop = null;
 let enabled = true;
+let unlocked = false;
 
 // Wichtig: Die ersten MP3-Dateien im Repo waren fehlerhafte Platzhalter.
 // Die Versionskennung verhindert, dass Browser diese alten Antworten weiter aus dem Cache laden.
-const ASSET_VERSION = "2026-09-22-v3";
+const ASSET_VERSION = "2026-09-22-v4";
 
 const AUDIO = {
   intro: ["assets/audio/intro.mp3", { volume: .78 }],
@@ -33,6 +34,16 @@ const AUDIO = {
 };
 
 for (const [name, [src, options]] of Object.entries(AUDIO)) registerClip(name, src, options);
+
+// Browser wie Chrome, Edge und Safari erlauben Audio zuverlässig erst nach einer
+// echten Nutzeraktion. Wir schalten es deshalb bereits beim ersten Klick frei,
+// bevor der eigentliche Button-Handler das Spiel startet.
+const primeFromUserGesture = () => {
+  if (unlocked) return;
+  unlockAudio().then(ok => { if (ok) unlocked = true; });
+};
+document.addEventListener("pointerdown", primeFromUserGesture, { capture: true, once: true });
+document.addEventListener("keydown", primeFromUserGesture, { capture: true, once: true });
 
 export function setAudioEnabled(value) {
   enabled = Boolean(value);
@@ -67,8 +78,6 @@ export function questionTrack(index) {
   return "q-million";
 }
 
-// Wird direkt aus einem echten Klick heraus aufgerufen. Damit ist Audio auch in
-// Browsern mit strenger Autoplay-Regel für die nachfolgenden Spielsounds freigeschaltet.
 export async function unlockAudio() {
   if (!enabled) return true;
   const audio = clips.get("intro");
@@ -99,6 +108,7 @@ export async function playClip(name, { restart = true } = {}) {
   if (restart) audio.currentTime = 0;
   try {
     await audio.play();
+    unlocked = true;
     if (audio.loop) currentLoop = audio;
     return true;
   } catch (error) {
