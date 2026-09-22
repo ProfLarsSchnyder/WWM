@@ -1,43 +1,40 @@
 const clips = new Map();
 let currentLoop = null;
 let pausedLoop = null;
+let foreground = null;
 let enabled = true;
 let unlocked = false;
+let foregroundToken = 0;
 
-// Wichtig: Die ersten MP3-Dateien im Repo waren fehlerhafte Platzhalter.
-// Die Versionskennung verhindert, dass Browser diese alten Antworten weiter aus dem Cache laden.
-const ASSET_VERSION = "2026-09-22-v4";
+const ASSET_VERSION = "2026-09-22-v5";
 
 const AUDIO = {
-  intro: ["assets/audio/intro.mp3", { volume: .78 }],
-  "q-low": ["assets/audio/question-low.mp3", { loop: true, volume: .42 }],
-  "q-mid": ["assets/audio/question-mid.mp3", { loop: true, volume: .42 }],
-  "q-32000": ["assets/audio/question-32000.mp3", { loop: true, volume: .43 }],
-  "q-64000": ["assets/audio/question-64000.mp3", { loop: true, volume: .43 }],
-  "q-125000": ["assets/audio/question-125000.mp3", { loop: true, volume: .43 }],
-  "q-500000": ["assets/audio/question-500000.mp3", { loop: true, volume: .43 }],
-  "q-million": ["assets/audio/question-million.mp3", { loop: true, volume: .45 }],
-  "lock-high": ["assets/audio/final-answer-high.mp3", { volume: .72 }],
-  "lock-million": ["assets/audio/final-answer-million.mp3", { volume: .76 }],
-  "correct-low": ["assets/audio/correct-low.mp3", { volume: .8 }],
-  "correct-high": ["assets/audio/correct-high.mp3", { volume: .82 }],
-  "correct-million": ["assets/audio/correct-million.mp3", { volume: .86 }],
-  wrong: ["assets/audio/wrong.mp3", { volume: .82 }],
-  "wrong-million": ["assets/audio/wrong-million.mp3", { volume: .86 }],
-  safe1: ["assets/audio/safe-1.mp3", { volume: .8 }],
-  safe2: ["assets/audio/safe-2.mp3", { volume: .8 }],
-  "joker-fifty": ["assets/audio/joker-5050.mp3", { volume: .78 }],
-  "joker-audience": ["assets/audio/joker-audience.mp3", { volume: .72 }],
-  "joker-phone": ["assets/audio/joker-phone.mp3", { volume: .7 }],
-  "joker-teacher": ["assets/audio/lifeline-ping.mp3", { volume: .82 }],
-  outro: ["assets/audio/outro.mp3", { volume: .74 }]
+  intro: ["assets/audio/intro.mp3", { volume: .82 }],
+  "q-low": ["assets/audio/question-low.mp3", { loop: true, volume: .46 }],
+  "q-mid": ["assets/audio/question-mid.mp3", { loop: true, volume: .46 }],
+  "q-32000": ["assets/audio/question-32000.mp3", { loop: true, volume: .46 }],
+  "q-64000": ["assets/audio/question-64000.mp3", { loop: true, volume: .46 }],
+  "q-125000": ["assets/audio/question-125000.mp3", { loop: true, volume: .46 }],
+  "q-500000": ["assets/audio/question-500000.mp3", { loop: true, volume: .46 }],
+  "q-million": ["assets/audio/question-million.mp3", { loop: true, volume: .48 }],
+  "lock-high": ["assets/audio/final-answer-high.mp3", { volume: .78 }],
+  "lock-million": ["assets/audio/final-answer-million.mp3", { volume: .8 }],
+  "correct-low": ["assets/audio/correct-low.mp3", { volume: .88 }],
+  "correct-high": ["assets/audio/correct-high.mp3", { volume: .9 }],
+  "correct-million": ["assets/audio/correct-million.mp3", { volume: .92 }],
+  wrong: ["assets/audio/wrong.mp3", { volume: .88 }],
+  "wrong-million": ["assets/audio/wrong-million.mp3", { volume: .92 }],
+  safe1: ["assets/audio/safe-1.mp3", { volume: .88 }],
+  safe2: ["assets/audio/safe-2.mp3", { volume: .88 }],
+  "joker-fifty": ["assets/audio/joker-5050.mp3", { volume: .84 }],
+  "joker-audience": ["assets/audio/joker-audience.mp3", { volume: .8 }],
+  "joker-phone": ["assets/audio/joker-phone.mp3", { volume: .8 }],
+  "joker-teacher": ["assets/audio/lifeline-ping.mp3", { volume: .86 }],
+  outro: ["assets/audio/outro.mp3", { volume: .8 }]
 };
 
 for (const [name, [src, options]] of Object.entries(AUDIO)) registerClip(name, src, options);
 
-// Browser wie Chrome, Edge und Safari erlauben Audio zuverlässig erst nach einer
-// echten Nutzeraktion. Wir schalten es deshalb bereits beim ersten Klick frei,
-// bevor der eigentliche Button-Handler das Spiel startet.
 const primeFromUserGesture = () => {
   if (unlocked) return;
   unlockAudio().then(ok => { if (ok) unlocked = true; });
@@ -98,32 +95,82 @@ export async function unlockAudio() {
   }
 }
 
-export async function playClip(name, { restart = true } = {}) {
+function stopAudioElement(audio) {
+  if (!audio) return;
+  audio.pause();
+  try { audio.currentTime = 0; } catch {}
+}
+
+export async function startLoop(name, { restart = true } = {}) {
   if (!enabled) return false;
   const audio = clips.get(name);
-  if (!audio) {
-    console.warn(`Unbekannter Audio-Clip: ${name}`);
-    return false;
-  }
+  if (!audio) return false;
+  if (currentLoop && currentLoop !== audio) stopAudioElement(currentLoop);
+  if (pausedLoop && pausedLoop !== audio) stopAudioElement(pausedLoop);
+  pausedLoop = null;
+  currentLoop = audio;
   if (restart) audio.currentTime = 0;
   try {
     await audio.play();
     unlocked = true;
-    if (audio.loop) currentLoop = audio;
     return true;
   } catch (error) {
-    console.warn(`Audio ${name} konnte nicht gestartet werden.`, error);
+    console.warn(`Fragemusik ${name} konnte nicht gestartet werden.`, error);
     return false;
   }
+}
+
+export async function playCue(name, { restart = true, replace = true } = {}) {
+  if (!enabled) return { ended: false, disabled: true };
+  const audio = clips.get(name);
+  if (!audio) return { ended: false, missing: true };
+
+  if (replace) stopForeground();
+  const token = ++foregroundToken;
+  foreground = audio;
+  if (restart) audio.currentTime = 0;
+
+  return new Promise(resolve => {
+    let settled = false;
+    const done = reason => {
+      if (settled) return;
+      settled = true;
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      if (foreground === audio && token === foregroundToken) foreground = null;
+      resolve({ ended: reason === "ended", reason });
+    };
+    const onEnded = () => done("ended");
+    const onError = () => done("error");
+    audio.addEventListener("ended", onEnded, { once: true });
+    audio.addEventListener("error", onError, { once: true });
+    audio.play().then(() => { unlocked = true; }).catch(error => {
+      console.warn(`Audio ${name} konnte nicht gestartet werden.`, error);
+      done("blocked");
+    });
+  });
+}
+
+export function playClip(name, options = {}) {
+  return playCue(name, options);
+}
+
+export function stopForeground() {
+  foregroundToken += 1;
+  if (foreground) stopAudioElement(foreground);
+  foreground = null;
 }
 
 export function stopClip(name) {
   const audio = clips.get(name);
   if (!audio) return;
-  audio.pause();
-  audio.currentTime = 0;
+  stopAudioElement(audio);
   if (audio === currentLoop) currentLoop = null;
   if (audio === pausedLoop) pausedLoop = null;
+  if (audio === foreground) {
+    foregroundToken += 1;
+    foreground = null;
+  }
 }
 
 export function pauseLoop() {
@@ -133,47 +180,39 @@ export function pauseLoop() {
 }
 
 export async function resumeLoop() {
-  if (!enabled || !pausedLoop) return;
+  if (!enabled || !pausedLoop || foreground) return false;
   const audio = pausedLoop;
   pausedLoop = null;
   currentLoop = audio;
-  try { await audio.play(); } catch (error) { console.warn("Fragemusik konnte nicht fortgesetzt werden.", error); }
+  try {
+    await audio.play();
+    return true;
+  } catch (error) {
+    console.warn("Fragemusik konnte nicht fortgesetzt werden.", error);
+    return false;
+  }
 }
 
 export function stopLoop() {
-  const audio = currentLoop || pausedLoop;
-  if (audio) {
-    audio.pause();
-    audio.currentTime = 0;
-  }
+  const loop = currentLoop || pausedLoop;
+  if (loop) stopAudioElement(loop);
   currentLoop = null;
   pausedLoop = null;
 }
 
 export function stopAll() {
-  for (const audio of clips.values()) {
-    audio.pause();
-    audio.currentTime = 0;
-  }
+  foregroundToken += 1;
+  for (const audio of clips.values()) stopAudioElement(audio);
   currentLoop = null;
   pausedLoop = null;
+  foreground = null;
 }
 
-export function fadeOut(name, duration = 500) {
+export function isForegroundPlaying() {
+  return Boolean(foreground && !foreground.paused);
+}
+
+export function clipDuration(name) {
   const audio = clips.get(name);
-  if (!audio || audio.paused) return;
-  const startVolume = audio.volume;
-  const start = performance.now();
-  function tick(now) {
-    const progress = Math.min(1, (now - start) / duration);
-    audio.volume = startVolume * (1 - progress);
-    if (progress < 1) requestAnimationFrame(tick);
-    else {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.volume = startVolume;
-      if (audio === currentLoop) currentLoop = null;
-    }
-  }
-  requestAnimationFrame(tick);
+  return Number.isFinite(audio?.duration) ? audio.duration : null;
 }
