@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Recover and run patch script
         run: |
           git show b27835aee403b73d885bd5da09e23ca1a68e98b6:.github/workflows/wwm-polish-once.yml > /tmp/source.yml
