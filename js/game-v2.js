@@ -28,17 +28,17 @@ export function startGame(game) {
     finished: false,
     jokerBusy: false,
     name: '',
-    introReady: false,
+    introReady: true,
     jokers: { fifty:false, audience:false, phone:false, teacher:false }
   });
 
   $$('[data-joker]').forEach(button => button.classList.remove('used'));
   $('#intro-game-title').textContent = game.title;
   $('#contestant-name').value = '';
-  $('#intro-audio-status').textContent = 'Das Intro läuft ...';
+  $('#intro-audio-status').textContent = 'Das Intro läuft. Du kannst jederzeit starten.';
   $('#intro-progress-bar').style.width = '0%';
-  $('#begin-questions').disabled = true;
-  $('#begin-questions').classList.remove('ready');
+  $('#begin-questions').disabled = false;
+  $('#begin-questions').classList.add('ready');
   screen('game-intro');
   $('#contestant-name').focus();
   runIntro(seq);
@@ -185,11 +185,15 @@ async function reveal(seq) {
   else if (S.i >= 10 && S.i < 14) cue = 'correct-high';
   else if (S.i === 14) cue = 'correct-million';
 
-  await playCue(cue);
-  if (seq !== S.seq || S.finished) return;
+  const isFinalQuestion = S.i >= S.qs.length - 1 || S.i >= 14;
+  if (!isFinalQuestion) {
+    $('#next-question').classList.remove('hidden');
+    playCue(cue);
+    return;
+  }
 
-  if (S.i >= S.qs.length - 1 || S.i >= 14) finish(true);
-  else $('#next-question').classList.remove('hidden');
+  await playCue(cue);
+  if (seq === S.seq && !S.finished) finish(true);
 }
 
 export function nextQuestion() {
