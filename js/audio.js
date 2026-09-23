@@ -30,6 +30,7 @@ const AUDIO = {
   "joker-fifty": ["assets/audio/joker-5050.mp3", { volume: .84 }],
   "joker-audience": ["assets/audio/joker-audience.mp3", { volume: .80 }],
   "joker-phone": ["assets/audio/joker-phone.mp3", { volume: .80 }],
+  "lifeline-ping": ["assets/audio/lifeline-ping.mp3", { volume: .90 }],
   "joker-teacher": ["assets/audio/lifeline-ping.mp3", { volume: .86 }],
   outro: ["assets/audio/outro.mp3", { volume: .80 }]
 };

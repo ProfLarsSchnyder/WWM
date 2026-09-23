@@ -103,6 +103,7 @@ async function handleAction(action, button) {
   if (action === 'editor-import') return importEditorQuestions();
   if (action === 'editor-add-question') return addEditorQuestion();
   if (action === 'host-refresh') return refreshDashboard();
+  if (action === 'host-code-big') return showHostCode();
   if (action === 'host-stop') return stopHosting();
   if (action === 'host-back') return openTeacherHome();
   if (action === 'begin-questions') return beginQuestions();
@@ -396,6 +397,22 @@ async function hostGame(game) {
   showScreen('host');
   await refreshDashboard();
   startDashboardPolling();
+}
+
+function showHostCode() {
+  const code = $('#host-join-code').textContent.trim() || '------';
+  const title = $('#host-title').textContent.trim() || $('#host-game-name').textContent.trim() || 'Gehostetes Spiel';
+  modal(`
+    <div class="code-presenter-modal">
+      <div class="code-presenter-label">Spielcode</div>
+      <div class="code-presenter-code">${escapeHtml(code)}</div>
+      <div class="code-presenter-title">${escapeHtml(title)}</div>
+      <div class="code-presenter-hint">Lernendenmodus öffnen · Name und Klasse eingeben · Code verwenden</div>
+      <div class="modal-actions">
+        <button class="btn" data-action="fullscreen">Vollbild</button>
+        <button class="btn primary" data-modal="close">Schliessen</button>
+      </div>
+    </div>`, false, true);
 }
 
 async function openDashboard() {
@@ -854,7 +871,7 @@ async function jokerResult(type) {
 async function useFifty(seq) {
   const result = await jokerResult('fifty');
   const cue = playCue('joker-fifty');
-  await sleep(isAudioEnabled() ? 1300 : 120);
+  await sleep(isAudioEnabled() ? 1050 : 120);
   if (seq !== state.playSeq) return;
   for (const key of result.removedKeys || []) document.querySelector(`.answer[data-key="${key}"]`)?.classList.add('removed');
   if ((result.removedKeys || []).includes(state.play.selected)) {
@@ -863,10 +880,13 @@ async function useFifty(seq) {
     $('#lock-answer').disabled = true;
   }
   $('#game-status').textContent = '50:50 Joker eingesetzt';
-  await cue;
-  if (seq !== state.playSeq) return;
   state.jokerBusy = false;
-  await resumeLoop();
+
+  // The cue may continue, but the candidate can already select an answer.
+  cue.then(async () => {
+    if (seq !== state.playSeq || !state.play || state.play.locked || state.play.finished || state.jokerBusy) return;
+    await resumeLoop();
+  });
 }
 
 function localAudiencePercentages() {
@@ -889,31 +909,38 @@ function localAudiencePercentages() {
 }
 
 async function useAudience(seq) {
-  const started = performance.now();
   const resultPromise = jokerResult('audience').then(result => ({ result }), error => ({ error }));
+  playCue('joker-audience');
   modal(`
-    <div class="joker-phase">
+    <div class="joker-phase compact-joker-phase">
       <div class="phase-icon">👥</div>
       <h3>Publikumsjoker</h3>
       <div class="phase-copy">Das Publikum stimmt ab.</div>
       <div class="audience-stage"><div class="audience-live-bars"><span></span><span></span><span></span><span></span></div></div>
-      <div class="joker-clock">Das Ergebnis wird vorbereitet ...</div>
+      <div class="joker-clock joker-countdown"><strong>5</strong> Sekunden</div>
     </div>`, true);
 
-  await sleep(Math.max(0, 27000 - (performance.now() - started)));
+  for (let remaining = 4; remaining >= 1; remaining--) {
+    await sleep(1000);
+    if (seq !== state.playSeq) return;
+    const clock = document.querySelector('.joker-countdown strong');
+    if (clock) clock.textContent = String(remaining);
+  }
+  await sleep(1000);
   if (seq !== state.playSeq) return;
 
-  playCue('joker-audience');
-  await sleep(Math.max(0, 32000 - (performance.now() - started)));
-  if (seq !== state.playSeq) return;
-
+  stopForeground();
+  playCue('lifeline-ping');
   const packet = await resultPromise;
   if (packet.error) throw packet.error;
   const percentages = packet.result.percentages || {};
   modal(`
-    <h3>Das Publikum hat gewählt</h3>
-    <div class="audience-chart">${audienceBars(percentages)}</div>
-    <div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div>`, true);
+    <div class="joker-result-pop">
+      <div class="phase-icon">👥</div>
+      <h3>Das Publikum hat gewählt</h3>
+      <div class="audience-chart">${audienceBars(percentages)}</div>
+      <div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div>
+    </div>`, true);
 }
 
 function audienceBars(percentages) {
@@ -932,40 +959,31 @@ function localPhoneResult() {
 }
 
 async function usePhone(seq) {
-  const started = performance.now();
   const resultPromise = jokerResult('phone').then(result => ({ result }), error => ({ error }));
-  modal(`
-    <div class="joker-phase">
-      <div class="phase-icon">☎</div>
-      <h3>Telefonjoker</h3>
-      <div class="phone-process">Die Verbindung wird hergestellt und die Frage weitergegeben ...</div>
-      <div class="joker-clock">Der Telefonjoker hört zu.</div>
-    </div>`, true);
-
-  await sleep(Math.max(0, 20000 - (performance.now() - started)));
-  if (seq !== state.playSeq) return;
-
   playCue('joker-phone');
-  phonePhase('«Okay ... einen Moment. Ich gehe die Möglichkeiten im Kopf durch.»', 'Denkprozess läuft ...');
+  phonePhase('«Okay ... einen Moment. Ich gehe die Möglichkeiten im Kopf durch.»', '18 Sekunden zum Nachdenken');
+
   await sleep(6000);
   if (seq !== state.playSeq) return;
+  phonePhase('«Zwei Antworten wirken auf mich eher unwahrscheinlich. Ich versuche es einzugrenzen.»', 'Noch 12 Sekunden');
 
-  phonePhase('«Zwei Antworten wirken auf mich eher unwahrscheinlich. Ich versuche es einzugrenzen.»', 'Noch 12 Sekunden ...');
   await sleep(6000);
   if (seq !== state.playSeq) return;
+  phonePhase('«Ich habe jetzt eine klare Tendenz. Ich prüfe sie noch einmal kurz.»', 'Noch 6 Sekunden');
 
-  phonePhase('«Ich habe jetzt eine klare Tendenz. Ich prüfe sie noch einmal kurz.»', 'Noch 6 Sekunden ...');
-  await sleep(Math.max(0, 38000 - (performance.now() - started)));
+  await sleep(6000);
   if (seq !== state.playSeq) return;
+  stopForeground();
+  playCue('lifeline-ping');
 
   const packet = await resultPromise;
   if (packet.error) throw packet.error;
   const result = packet.result;
   modal(`
-    <div class="joker-phase">
+    <div class="joker-result-pop">
       <div class="phase-icon">☎</div>
       <h3>Der Tipp</h3>
-      <div class="phone-process">«Ich würde <strong>${escapeHtml(String(result.guessKey || '').toUpperCase())}</strong> nehmen. Ich bin ungefähr zu <strong>${Number(result.confidence || 0)}%</strong> sicher.»</div>
+      <div class="phone-process final-phone-tip">«Ich würde <strong>${escapeHtml(String(result.guessKey || '').toUpperCase())}</strong> nehmen. Ich bin ungefähr zu <strong>${Number(result.confidence || 0)}%</strong> sicher.»</div>
       <div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div>
     </div>`, true);
 }
@@ -1035,13 +1053,38 @@ function finishGame(won) {
   else if (state.play.index >= 5) amountIndex = 4;
   else amountIndex = -1;
 
-  $('#result-kicker').textContent = won ? 'Geschafft!' : 'Spiel beendet';
+  const card = document.querySelector('.result-card');
+  const screen = document.querySelector('.result-screen');
+  const finalWinner = won && amountIndex === 14;
+  card?.classList.toggle('winner', won);
+  card?.classList.toggle('million-winner', finalWinner);
+  card?.classList.toggle('lost', !won);
+  screen?.classList.toggle('winner-screen', won);
+  document.querySelector('.winner-confetti')?.remove();
+
+  if (won && card) {
+    const confetti = document.createElement('div');
+    confetti.className = 'winner-confetti';
+    for (let i = 0; i < 34; i++) {
+      const piece = document.createElement('span');
+      piece.style.setProperty('--x', `${4 + Math.random() * 92}%`);
+      piece.style.setProperty('--delay', `${Math.random() * 1.8}s`);
+      piece.style.setProperty('--dur', `${2.3 + Math.random() * 2.1}s`);
+      piece.style.setProperty('--rot', `${Math.floor(Math.random() * 360)}deg`);
+      confetti.append(piece);
+    }
+    card.prepend(confetti);
+  }
+
+  const playerName = state.play.name && state.play.name !== 'Kandidat/in' ? state.play.name : '';
+  $('#result-kicker').textContent = won ? (finalWinner ? '🏆 MILLIONÄR! 🏆' : '🏆 GESCHAFFT! 🏆') : 'Spiel beendet';
   $('#result-money').textContent = amountIndex >= 0 ? money[amountIndex] : '0 €';
   $('#result-copy').textContent = state.play.mode === 'student'
-    ? (won ? 'Du hast das Spiel erfolgreich beendet.' : 'Danke fürs Mitspielen.')
-    : (won ? 'Die höchste erreichte Gewinnstufe.' : 'Die sichere Gewinnstufe.');
+    ? (won ? `${playerName ? playerName + ', du' : 'Du'} hast das Spiel erfolgreich beendet!` : 'Danke fürs Mitspielen.')
+    : (won ? `${playerName ? playerName + ' hat' : 'Der Kandidat oder die Kandidatin hat'} es geschafft!` : 'Die sichere Gewinnstufe.');
   $('#result-primary').textContent = state.play.mode === 'student' ? 'Zur Startseite' : 'Zurück zum Lehrermodus';
   showScreen('result');
+  if (won) playCue('outro');
 }
 
 async function resultPrimary() {

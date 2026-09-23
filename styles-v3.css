@@ -46,3 +46,67 @@ body{min-height:100vh}.screen{min-height:100vh}.hidden{display:none!important}
 
 @media(max-width:1100px){.teacher-nav{grid-template-columns:1fr 1fr}.host-layout{grid-template-columns:1fr}.host-code-card{position:relative;top:auto}.metric-grid{grid-template-columns:repeat(3,1fr)}.editor-v3-layout{grid-template-columns:1fr}.question-list-v3{max-height:none}}
 @media(max-width:720px){.mode-grid{grid-template-columns:1fr}.mode-choice{min-height:145px}.teacher-shell,.editor-v3-wrap{padding:14px}.teacher-head,.editor-v3-head{align-items:flex-start;flex-direction:column}.teacher-nav{grid-template-columns:1fr}.metric-grid{grid-template-columns:1fr 1fr}.answer-editor-grid{grid-template-columns:1fr}.answer-editor-grid .correct-field{grid-column:auto}.history-row{grid-template-columns:1fr}.mode-card{padding:20px}.game-sidebar{display:none}.game-layout{grid-template-columns:1fr!important}.answers{grid-template-columns:1fr!important}}
+
+
+/* WWM v3.1 gameplay polish */
+body{background:
+  radial-gradient(circle at 76% 12%,rgba(66,75,225,.20),transparent 30%),
+  radial-gradient(circle at 18% 78%,rgba(91,35,190,.16),transparent 32%),
+  linear-gradient(145deg,#010219 0%,#07104f 52%,#11032d 100%)}
+.teacher-nav .nav-card,.game-card-v3,.qstat,.metric{transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease,background .16s ease}
+.teacher-nav .nav-card:hover,.game-card-v3:hover,.qstat:hover{transform:translateY(-2px);border-color:rgba(255,157,47,.62);box-shadow:0 12px 32px rgba(0,0,25,.24)}
+.teacher-section{background:linear-gradient(180deg,rgba(7,10,46,.88),rgba(3,5,29,.82));box-shadow:0 24px 72px rgba(0,0,20,.32),inset 0 1px 0 rgba(255,255,255,.025)}
+.host-code-card{overflow:hidden;box-shadow:0 18px 48px rgba(0,0,24,.27),inset 0 1px 0 rgba(255,255,255,.04)}
+.host-code-card::before{content:"";display:block;height:3px;margin:-22px -22px 18px;background:linear-gradient(90deg,#6f83ff,#ff9d2f,#8c54ff)}
+.host-code-big-btn{width:100%;margin:2px 0 16px}
+
+/* The complete game now stays inside the visible browser viewport. */
+.game-screen.active{display:flex;flex-direction:column;height:100dvh;min-height:0;padding:10px 16px 12px;overflow:hidden}
+.game-topbar{flex:0 0 auto;width:min(1740px,100%);margin:0 auto 5px;min-height:58px}
+.mini-logo{width:68px;height:44px}.mini-brand{gap:10px}.mini-brand small{margin-top:1px}.game-mode-badge{margin-top:2px}
+.game-layout{flex:1 1 auto;min-height:0;height:auto;width:min(1740px,100%);margin:0 auto;grid-template-columns:minmax(0,1fr) 250px;gap:16px;overflow:hidden}
+.quiz-stage{min-height:0;justify-content:center;padding:9vh 0 4px}
+.question-shell{width:96%;min-height:90px;margin:0 auto 10px;padding:16px 54px;font-size:clamp(19px,1.8vw,28px)}
+.answers{gap:10px 14px}.answer{min-height:66px;padding:13px 28px 13px 66px;font-size:clamp(15px,1.18vw,20px)}.answer-letter{left:28px}
+.answer-controls{margin-top:10px;min-height:40px}.game-status{min-height:20px;margin-top:5px;font-size:14px}
+.game-sidebar{min-height:0;justify-content:center;gap:9px}.joker-row{gap:6px}.joker{min-height:48px;font-size:14px}
+.money-ladder{padding:7px 8px;border-radius:17px}.money-step{min-height:24px;padding:1px 8px;font-size:12.5px;grid-template-columns:28px 1fr}
+
+/* Fast, TV-like joker transitions */
+.compact-joker-phase .audience-stage{min-height:220px}.compact-joker-phase .audience-live-bars{height:175px}
+.joker-result-pop{animation:jokerPop .24s ease both}.phase-icon{text-align:center;font-size:42px;margin-bottom:6px}
+.joker-countdown{text-align:center;font-size:15px}.joker-countdown strong{font-size:24px;color:#fff}
+.final-phone-tip{min-height:130px}
+@keyframes jokerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+
+/* Large classroom code presentation */
+.modal-card.wide:has(.code-presenter-modal){width:min(1180px,96vw);padding:22px;background:radial-gradient(circle at 50% 35%,#182078 0%,#090d44 42%,#040625 100%);border-color:rgba(255,157,47,.72)}
+.code-presenter-modal{text-align:center;padding:28px 20px 18px}
+.code-presenter-label{text-transform:uppercase;letter-spacing:.22em;color:#bec8ff;font-size:16px;font-weight:900}
+.code-presenter-code{font-size:clamp(82px,13vw,190px);line-height:1;font-weight:1000;letter-spacing:.09em;color:#ffad45;text-shadow:0 0 32px rgba(255,157,47,.35);margin:18px 0}
+.code-presenter-title{font-size:clamp(24px,3vw,42px);font-weight:900}.code-presenter-hint{margin-top:12px;color:#b9c2ef;font-size:16px}
+
+/* Winner screen */
+.result-screen{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 36%,rgba(98,61,255,.22),transparent 34%)}
+.result-card{position:relative;overflow:hidden;isolation:isolate;transition:.3s ease}
+.result-card.winner{width:min(880px,94vw);padding:42px 34px;border-color:rgba(255,197,90,.86);background:radial-gradient(circle at 50% 16%,rgba(255,176,67,.17),transparent 28%),linear-gradient(180deg,#12176e,#060832 72%);box-shadow:0 0 50px rgba(255,164,54,.20),0 28px 90px rgba(0,0,24,.55);animation:winnerCard .65s cubic-bezier(.2,.85,.25,1.2) both}
+.result-card.winner::before{content:"🏆";display:grid;place-items:center;width:92px;height:92px;margin:0 auto 12px;border-radius:50%;font-size:48px;background:radial-gradient(circle,#ffdc86,#ec9022 66%,#9a4b0a);box-shadow:0 0 40px rgba(255,178,51,.38);position:relative;z-index:2}
+.result-card.winner img{width:min(330px,62vw);box-shadow:0 0 32px rgba(102,74,255,.30)}
+.result-card.winner .result-kicker{font-size:clamp(20px,3vw,34px);font-weight:1000;letter-spacing:.05em;color:#fff;margin-top:20px;text-shadow:0 0 22px rgba(255,255,255,.24)}
+.result-card.winner .result-money{font-size:clamp(58px,9vw,112px);background:linear-gradient(180deg,#fff6cc,#ffb23e 72%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;filter:drop-shadow(0 0 18px rgba(255,166,48,.25))}
+.result-card.million-winner{border-width:2px}.result-card.million-winner::after{content:"";position:absolute;inset:-45%;z-index:-1;background:repeating-conic-gradient(from 0deg,rgba(255,207,101,.12) 0 5deg,transparent 5deg 14deg);animation:winnerSpin 18s linear infinite}
+.winner-confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1}.winner-confetti span{position:absolute;left:var(--x);top:-18px;width:8px;height:16px;border-radius:2px;background:#ffb13f;transform:rotate(var(--rot));animation:confettiFall var(--dur) linear var(--delay) infinite}.winner-confetti span:nth-child(3n){background:#8b7cff}.winner-confetti span:nth-child(3n+1){background:#f8f8ff}.winner-confetti span:nth-child(4n){width:6px;height:10px;border-radius:50%;background:#37d884}
+.result-card.winner>*:not(.winner-confetti){position:relative;z-index:2}
+@keyframes winnerCard{from{opacity:0;transform:scale(.88) translateY(18px)}to{opacity:1;transform:none}}
+@keyframes winnerSpin{to{transform:rotate(360deg)}}
+@keyframes confettiFall{0%{transform:translateY(-30px) rotate(var(--rot));opacity:0}10%{opacity:1}100%{transform:translateY(760px) rotate(720deg);opacity:.9}}
+
+@media(max-height:900px) and (min-width:721px){
+  .game-screen.active{padding:6px 12px 8px}.game-topbar{min-height:50px}.mini-logo{width:58px;height:38px}
+  .game-layout{grid-template-columns:minmax(0,1fr) 230px;gap:12px}.quiz-stage{padding-top:5vh}
+  .question-shell{min-height:76px;padding:12px 48px;margin-bottom:8px;font-size:clamp(17px,1.65vw,24px)}
+  .answers{gap:8px 12px}.answer{min-height:56px;padding-top:10px;padding-bottom:10px;font-size:clamp(14px,1.05vw,18px)}
+  .answer-controls{margin-top:7px}.game-status{margin-top:2px}.joker{min-height:42px}.money-step{min-height:21px;font-size:11.5px}.money-ladder{padding:5px 7px}
+}
+
+@media(max-width:900px){.game-screen.active{height:auto;min-height:100vh;overflow:visible}.game-layout{overflow:visible}.quiz-stage{padding-top:30px}}
