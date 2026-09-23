@@ -925,7 +925,7 @@ function localAudiencePercentages() {
 
 async function useAudience(seq) {
   const resultPromise = jokerResult('audience').then(result => ({ result }), error => ({ error }));
-  const audioPromise = playCueSegment('joker-audience', 26, 33);
+  const audioPromise = playCueSegment('joker-audience', 26, 32.5);
 
   modal(`
     <div class="joker-phase compact-joker-phase">
@@ -939,7 +939,7 @@ async function useAudience(seq) {
   for (let remaining = 7; remaining >= 1; remaining--) {
     const clock = document.querySelector('.joker-countdown strong');
     if (clock) clock.textContent = String(remaining);
-    await sleep(1000);
+    await sleep(remaining === 1 ? 500 : 1000);
     if (seq !== state.playSeq) return;
   }
 
@@ -975,7 +975,7 @@ function localPhoneResult() {
 
 async function usePhone(seq) {
   const resultPromise = jokerResult('phone').then(result => ({ result }), error => ({ error }));
-  const audioPromise = playCueSegment('joker-phone', 20, 39);
+  const audioPromise = playCueSegment('joker-phone', 21, 40);
 
   const thoughtFor = remaining => {
     if (remaining > 12) return '«Okay ... einen Moment. Ich gehe die Möglichkeiten im Kopf durch.»';
