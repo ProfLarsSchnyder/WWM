@@ -719,6 +719,17 @@ function amountForIndex(index) {
   return money[Math.min(Math.max(index, 0), 14)];
 }
 
+function answerRevealDelay(index) {
+  if (index <= 4) return 1000;      // 50–500
+  if (index <= 8) return 1500;      // 1'000–8'000
+  if (index === 9) return 2000;     // 16'000
+  if (index === 10) return 2500;    // 32'000
+  if (index === 11) return 3000;    // 64'000
+  if (index === 12) return 3500;    // 125'000
+  if (index === 13) return 4500;    // 500'000
+  return 6000;                       // 1'000'000
+}
+
 function selectAnswer(key) {
   if (!state.play || state.play.locked || state.jokerBusy) return;
   const button = document.querySelector(`.answer[data-key="${key}"]`);
@@ -744,12 +755,16 @@ async function lockAnswer() {
     serverPromise = studentSubmitAnswer(state.play.index, state.play.selected, responseMs);
   }
 
+  const revealDelay = answerRevealDelay(state.play.index);
+
+  // Higher levels get their suspense cue, but the visual reveal is controlled
+  // by a fixed show timing instead of waiting for the whole audio file.
   if (state.play.index >= 10) {
     stopLoop();
-    await playCue(state.play.index === 14 ? 'lock-million' : 'lock-high');
-  } else {
-    await sleep(1250);
+    playCue(state.play.index === 14 ? 'lock-million' : 'lock-high');
   }
+
+  await sleep(revealDelay);
 
   if (seq !== state.playSeq || state.play.finished) return;
   const result = serverPromise ? await serverPromise : null;
@@ -929,8 +944,7 @@ async function useAudience(seq) {
   await sleep(1000);
   if (seq !== state.playSeq) return;
 
-  stopForeground();
-  playCue('lifeline-ping');
+  // Keep the audience MP3 running: its own transition sound is timed to the reveal.
   const packet = await resultPromise;
   if (packet.error) throw packet.error;
   const percentages = packet.result.percentages || {};
@@ -973,8 +987,7 @@ async function usePhone(seq) {
 
   await sleep(6000);
   if (seq !== state.playSeq) return;
-  stopForeground();
-  playCue('lifeline-ping');
+  // Keep the phone MP3 running into the final tip; no extra ping is added.
 
   const packet = await resultPromise;
   if (packet.error) throw packet.error;
