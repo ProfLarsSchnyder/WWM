@@ -925,7 +925,7 @@ function localAudiencePercentages() {
 
 async function useAudience(seq) {
   const resultPromise = jokerResult('audience').then(result => ({ result }), error => ({ error }));
-  const audioPromise = playCueSegment('joker-audience', 26, 32);
+  const audioPromise = playCueSegment('joker-audience', 26, 33);
 
   modal(`
     <div class="joker-phase compact-joker-phase">
@@ -933,10 +933,10 @@ async function useAudience(seq) {
       <h3>Publikumsjoker</h3>
       <div class="phase-copy">Das Publikum stimmt ab.</div>
       <div class="audience-stage"><div class="audience-live-bars"><span></span><span></span><span></span><span></span></div></div>
-      <div class="joker-clock joker-countdown"><strong>6</strong> Sekunden</div>
+      <div class="joker-clock joker-countdown"><strong>7</strong> Sekunden</div>
     </div>`, true);
 
-  for (let remaining = 6; remaining >= 1; remaining--) {
+  for (let remaining = 7; remaining >= 1; remaining--) {
     const clock = document.querySelector('.joker-countdown strong');
     if (clock) clock.textContent = String(remaining);
     await sleep(1000);
@@ -975,7 +975,7 @@ function localPhoneResult() {
 
 async function usePhone(seq) {
   const resultPromise = jokerResult('phone').then(result => ({ result }), error => ({ error }));
-  const audioPromise = playCueSegment('joker-phone', 20, 38);
+  const audioPromise = playCueSegment('joker-phone', 20, 39);
 
   const thoughtFor = remaining => {
     if (remaining > 12) return '«Okay ... einen Moment. Ich gehe die Möglichkeiten im Kopf durch.»';
@@ -983,9 +983,9 @@ async function usePhone(seq) {
     return '«Ich habe jetzt eine klare Tendenz. Ich prüfe sie noch einmal kurz.»';
   };
 
-  phonePhase(thoughtFor(18), 18);
+  phonePhase(thoughtFor(19), 19);
 
-  for (let remaining = 18; remaining >= 1; remaining--) {
+  for (let remaining = 19; remaining >= 1; remaining--) {
     if ([12, 6].includes(remaining)) phonePhase(thoughtFor(remaining), remaining);
     const clock = document.querySelector('.joker-countdown strong');
     if (clock) clock.textContent = String(remaining);
