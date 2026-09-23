@@ -3,9 +3,11 @@ import { S,$,$$,demo,screen,toast } from './state-v2.js';
 import { library,openEditor,addQuestion,doImport,previewImport,loadExample,saveEditor } from './editor-v2.js';
 import { startGame,beginQuestions,cancelIntro,lockAnswer,nextQuestion,useJoker,quit,closeModal,toggleAudio } from './game-v2.js';
 import { stopAll } from './audio.js';
+import { initCloudUI } from './cloud-ui.js';
 
 await initStorage();
 bind();
+initCloudUI();
 screen('home');
 
 function bind() {
