@@ -1,0 +1,28 @@
+name: Run joker timing patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/run-adjust-joker-windows.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply timing patch
+        run: python .github/scripts/adjust_joker_windows.py
+      - name: Check syntax
+        run: node --check js/app-v3.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app-v3.js
+          git commit -m "Adjust audience and phone joker timing"
+          git push
