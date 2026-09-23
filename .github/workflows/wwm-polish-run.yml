@@ -1,0 +1,40 @@
+name: Run WWM gameplay polish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wwm-polish-run.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover and run patch script
+        run: |
+          git show b27835aee403b73d885bd5da09e23ca1a68e98b6:.github/workflows/wwm-polish-once.yml > /tmp/source.yml
+          python - <<'PY'
+          from pathlib import Path
+          lines = Path('/tmp/source.yml').read_text(encoding='utf-8').splitlines()
+          start = next(i for i, line in enumerate(lines) if "python - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'PY')
+          body = []
+          for line in lines[start:end]:
+              body.append(line[10:] if line.startswith('          ') else line)
+          Path('/tmp/patch.py').write_text('\n'.join(body) + '\n', encoding='utf-8')
+          PY
+          python /tmp/patch.py
+      - name: Syntax check
+        run: node --check js/app-v3.js && node --check js/audio.js && node --check js/backend-v3.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html js/app-v3.js js/audio.js styles-v3.css
+          git diff --cached --quiet && exit 0
+          git commit -m "Polish WWM layout jokers winner and hosting code"
+          git push
