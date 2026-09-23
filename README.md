@@ -1,80 +1,111 @@
 # WWM Unterrichtsquiz
 
-Browserbasiertes Unterrichtsquiz im Stil von «Wer wird Millionär?». Die App läuft als statische Website und kann Fragensätze lokal oder über Supabase speichern.
+Browserbasiertes Unterrichtsquiz im Stil von «Wer wird Millionär?» mit getrenntem Lehrer- und Lernendenmodus.
 
-## Funktionen
+## Startseite
 
-- 15 Gewinnstufen
-- zufällige Antwortpositionen bei jedem Spiel
-- 50:50, Publikumsjoker, Telefonjoker und Lehrerjoker
-- einfacher Textimport, Excel/CSV und JSON
-- sehr einfaches Fünf-Zeilen-Format ohne technische Syntax
-- Fragensätze speichern, bearbeiten, duplizieren und löschen
-- optionaler Supabase Cloud-Speicher mit persönlichem Cloud Code
-- lokale Spiele können in die Cloud kopiert werden
-- Vollbildmodus und Tastatursteuerung
-- Soundtracks für Fragen, Lösungen, Joker und Gewinnstufen
+Die App startet immer mit zwei Möglichkeiten:
 
-## Einfachster Fragenimport
+- **Lehrermodus**
+- **Lernendenmodus**
 
-Dieses Format reicht bereits. Pro Frage fünf Zeilen, danach eine Leerzeile:
+Der Lehrermodus ist über das in Supabase hinterlegte Passwort geschützt. Standardmässig ist es `1234`. Der Lernendenmodus benötigt kein Passwort.
+
+## Lehrermodus
+
+Lehrpersonen können:
+
+- Spiele erstellen, bearbeiten, duplizieren und löschen
+- Fragen über einfachen Text, Excel/CSV oder JSON importieren
+- Spiele direkt am Beamer durchführen
+- ein Spiel für Lernende hosten
+- den permanenten Spielcode anzeigen
+- den Lernstand der Teilnehmenden live verfolgen
+- Namen, Klassen, Fortschritt, Joker und Status sehen
+- eine Fragenanalyse mit Erfolgsquoten sehen
+- vergangene gehostete Durchläufe auflisten
+
+Das Live-Dashboard aktualisiert sich automatisch alle 30 Sekunden.
+
+## Lernendenmodus
+
+Lernende geben nur ein:
+
+- Name
+- Klasse
+- Spielcode
+
+Danach spielen sie das aktuell gehostete Spiel selbstständig. Lehrerfunktionen, technische Einstellungen und Supabase-Informationen werden im Lernendenmodus nicht angezeigt.
+
+Die richtige Lösung wird bei gehosteten Spielen nicht vorzeitig an den Browser geschickt. Erst nach dem Einloggen einer Antwort liefert das Backend das Ergebnis zurück.
+
+## Joker
+
+Enthalten sind:
+
+- 50:50
+- Publikumsjoker
+- Telefonjoker
+- Lehrerjoker
+
+### Publikumsjoker
+
+- Sekunde 0: Abstimmung beginnt
+- Sekunde 27: Publikumsjoker-Sound startet
+- Sekunde 32: Prozentresultate erscheinen
+
+### Telefonjoker
+
+- Sekunde 0: Verbindung und Frageübergabe
+- Sekunde 20: Telefonjoker-Sound startet
+- Sekunde 20 bis 38: Denkprozess in mehreren Etappen
+- Sekunde 38: finaler Tipp erscheint
+
+## Audio
+
+Die vorhandenen MP3-Dateien in `assets/audio/` werden für Intro, Fragemusik, richtige und falsche Antworten, Gewinnstufen und Joker verwendet.
+
+Das Intro muss nicht vollständig angehört werden. Das Spiel kann jederzeit gestartet werden. Nach einer richtigen Antwort erscheint die Schaltfläche für die nächste Frage sofort, auch wenn der Erfolgssound noch läuft.
+
+## Fragenimport
+
+Das einfachste Format besteht aus fünf Zeilen pro Frage:
 
 ```text
 Was versteht man unter Inflation?
 Anstieg des allgemeinen Preisniveaus
-Rückgang der Arbeitslosigkeit
-Zunahme des realen BIP
+Sinkende Arbeitslosigkeit
+Steigendes reales BIP
 Sinkende Staatsausgaben
 
 Was ist ein Substitutionsgut zu Butter?
 Margarine
 Brot
-Salz
 Milch
+Salz
 ```
 
-Dabei gilt immer:
+Dabei gilt:
 
 1. Zeile = Frage
 2. Zeile = richtige Antwort
 3. bis 5. Zeile = falsche Antworten
 
-Die App mischt A, B, C und D bei jedem Spiel automatisch neu.
+A, B, C und D werden beim Spielen automatisch gemischt.
 
-Alternativ funktioniert weiterhin das beschriftete Format:
+## Supabase
 
-```text
-Frage: Was versteht man unter Inflation?
-Richtig: Anstieg des allgemeinen Preisniveaus
-Falsch: Rückgang der Arbeitslosigkeit
-Falsch: Zunahme des realen BIP
-Falsch: Sinkende Staatsausgaben
-```
+Supabase läuft vollständig im Hintergrund. Es gibt in der normalen Oberfläche keine Cloud-Einstellungen.
 
-Oder mit Markierungen:
+Einmalig nötig:
 
-```text
-Was versteht man unter Inflation?
-* Anstieg des allgemeinen Preisniveaus
-- Rückgang der Arbeitslosigkeit
-- Zunahme des realen BIP
-- Sinkende Staatsausgaben
-```
+1. Das aktuelle WWM SQL-Schema im Supabase SQL Editor ausführen.
+2. In `js/config-v3.js` die **Project URL** und den **Publishable Key** eintragen.
+3. Niemals einen `service_role` Key in die Website eintragen.
 
-## Supabase Cloud einrichten
+Die neue Oberfläche verwendet die RPC-Funktionen mit Präfix `wwm_teacher_` und `wwm_student_`.
 
-1. Ein Supabase Projekt erstellen.
-2. `supabase/schema.sql` im Supabase SQL Editor einmal vollständig ausführen.
-3. In der WWM Startseite auf `Cloud einrichten` klicken.
-4. Project URL und den **Publishable Key** eintragen.
-5. Einen langen Cloud Code erzeugen und sicher aufbewahren.
-6. Auf weiteren Geräten dieselben drei Angaben verwenden.
-
-Der Cloud Code ist der Zugriffsschlüssel für die gespeicherten Spiele. Die Tabelle selbst ist für direkte Browserzugriffe gesperrt, die App greift nur über die definierten Supabase RPC-Funktionen darauf zu. Einen `service_role` Key niemals in die Website eintragen.
-
-Wenn bereits lokale Spiele vorhanden sind, können sie nach dem Verbinden über `Lokale Spiele hochladen` in die Cloud kopiert werden.
-
-## Tastatur
+## Tastatur im Spiel
 
 - `1` bis `4`: Antwort wählen
 - `Enter`: Antwort einloggen oder nächste Frage
