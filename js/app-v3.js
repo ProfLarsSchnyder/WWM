@@ -889,7 +889,8 @@ function localAudiencePercentages() {
 }
 
 async function useAudience(seq) {
-  const resultPromise = jokerResult('audience');
+  const started = performance.now();
+  const resultPromise = jokerResult('audience').then(result => ({ result }), error => ({ error }));
   modal(`
     <div class="joker-phase">
       <div class="phase-icon">👥</div>
@@ -899,17 +900,16 @@ async function useAudience(seq) {
       <div class="joker-clock">Das Ergebnis wird vorbereitet ...</div>
     </div>`, true);
 
-  const result = await resultPromise;
-  const started = performance.now();
-  const remainingToSound = Math.max(0, 27000 - (performance.now() - started));
-  await sleep(remainingToSound);
+  await sleep(Math.max(0, 27000 - (performance.now() - started)));
   if (seq !== state.playSeq) return;
 
   playCue('joker-audience');
-  await sleep(5000);
+  await sleep(Math.max(0, 32000 - (performance.now() - started)));
   if (seq !== state.playSeq) return;
 
-  const percentages = result.percentages || {};
+  const packet = await resultPromise;
+  if (packet.error) throw packet.error;
+  const percentages = packet.result.percentages || {};
   modal(`
     <h3>Das Publikum hat gewählt</h3>
     <div class="audience-chart">${audienceBars(percentages)}</div>
@@ -932,7 +932,8 @@ function localPhoneResult() {
 }
 
 async function usePhone(seq) {
-  const resultPromise = jokerResult('phone');
+  const started = performance.now();
+  const resultPromise = jokerResult('phone').then(result => ({ result }), error => ({ error }));
   modal(`
     <div class="joker-phase">
       <div class="phase-icon">☎</div>
@@ -941,8 +942,7 @@ async function usePhone(seq) {
       <div class="joker-clock">Der Telefonjoker hört zu.</div>
     </div>`, true);
 
-  const result = await resultPromise;
-  await sleep(20000);
+  await sleep(Math.max(0, 20000 - (performance.now() - started)));
   if (seq !== state.playSeq) return;
 
   playCue('joker-phone');
@@ -955,9 +955,12 @@ async function usePhone(seq) {
   if (seq !== state.playSeq) return;
 
   phonePhase('«Ich habe jetzt eine klare Tendenz. Ich prüfe sie noch einmal kurz.»', 'Noch 6 Sekunden ...');
-  await sleep(6000);
+  await sleep(Math.max(0, 38000 - (performance.now() - started)));
   if (seq !== state.playSeq) return;
 
+  const packet = await resultPromise;
+  if (packet.error) throw packet.error;
+  const result = packet.result;
   modal(`
     <div class="joker-phase">
       <div class="phase-icon">☎</div>
