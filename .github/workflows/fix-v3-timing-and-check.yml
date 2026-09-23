@@ -1,0 +1,53 @@
+name: Fix WWM v3 timing and check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-v3-timing-and-check.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch exact joker timing
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('js/app-v3.js')
+          s = p.read_text(encoding='utf-8')
+
+          old = """async function useAudience(seq) {\n  const resultPromise = jokerResult('audience');\n  modal(`\n    <div class=\"joker-phase\">\n      <div class=\"phase-icon\">👥</div>\n      <h3>Publikumsjoker</h3>\n      <div class=\"phase-copy\">Das Publikum stimmt ab.</div>\n      <div class=\"audience-stage\"><div class=\"audience-live-bars\"><span></span><span></span><span></span><span></span></div></div>\n      <div class=\"joker-clock\">Das Ergebnis wird vorbereitet ...</div>\n    </div>`, true);\n\n  const result = await resultPromise;\n  const started = performance.now();\n  const remainingToSound = Math.max(0, 27000 - (performance.now() - started));\n  await sleep(remainingToSound);\n  if (seq !== state.playSeq) return;\n\n  playCue('joker-audience');\n  await sleep(5000);\n  if (seq !== state.playSeq) return;\n\n  const percentages = result.percentages || {};\n"""
+          new = """async function useAudience(seq) {\n  const started = performance.now();\n  const resultPromise = jokerResult('audience').then(result => ({ result }), error => ({ error }));\n  modal(`\n    <div class=\"joker-phase\">\n      <div class=\"phase-icon\">👥</div>\n      <h3>Publikumsjoker</h3>\n      <div class=\"phase-copy\">Das Publikum stimmt ab.</div>\n      <div class=\"audience-stage\"><div class=\"audience-live-bars\"><span></span><span></span><span></span><span></span></div></div>\n      <div class=\"joker-clock\">Das Ergebnis wird vorbereitet ...</div>\n    </div>`, true);\n\n  await sleep(Math.max(0, 27000 - (performance.now() - started)));\n  if (seq !== state.playSeq) return;\n\n  playCue('joker-audience');\n  await sleep(Math.max(0, 32000 - (performance.now() - started)));\n  if (seq !== state.playSeq) return;\n\n  const packet = await resultPromise;\n  if (packet.error) throw packet.error;\n  const percentages = packet.result.percentages || {};\n"""
+          if old not in s:
+              raise SystemExit('Audience snippet not found')
+          s = s.replace(old, new, 1)
+
+          old = """async function usePhone(seq) {\n  const resultPromise = jokerResult('phone');\n  modal(`\n    <div class=\"joker-phase\">\n      <div class=\"phase-icon\">☎</div>\n      <h3>Telefonjoker</h3>\n      <div class=\"phone-process\">Die Verbindung wird hergestellt und die Frage weitergegeben ...</div>\n      <div class=\"joker-clock\">Der Telefonjoker hört zu.</div>\n    </div>`, true);\n\n  const result = await resultPromise;\n  await sleep(20000);\n  if (seq !== state.playSeq) return;\n\n  playCue('joker-phone');\n"""
+          new = """async function usePhone(seq) {\n  const started = performance.now();\n  const resultPromise = jokerResult('phone').then(result => ({ result }), error => ({ error }));\n  modal(`\n    <div class=\"joker-phase\">\n      <div class=\"phase-icon\">☎</div>\n      <h3>Telefonjoker</h3>\n      <div class=\"phone-process\">Die Verbindung wird hergestellt und die Frage weitergegeben ...</div>\n      <div class=\"joker-clock\">Der Telefonjoker hört zu.</div>\n    </div>`, true);\n\n  await sleep(Math.max(0, 20000 - (performance.now() - started)));\n  if (seq !== state.playSeq) return;\n\n  playCue('joker-phone');\n"""
+          if old not in s:
+              raise SystemExit('Phone start snippet not found')
+          s = s.replace(old, new, 1)
+
+          old = """  await sleep(6000);\n  if (seq !== state.playSeq) return;\n\n  modal(`\n    <div class=\"joker-phase\">\n      <div class=\"phase-icon\">☎</div>\n      <h3>Der Tipp</h3>\n      <div class=\"phone-process\">«Ich würde <strong>${escapeHtml(String(result.guessKey || '').toUpperCase())}</strong> nehmen. Ich bin ungefähr zu <strong>${Number(result.confidence || 0)}%</strong> sicher.»</div>\n"""
+          new = """  await sleep(Math.max(0, 38000 - (performance.now() - started)));\n  if (seq !== state.playSeq) return;\n\n  const packet = await resultPromise;\n  if (packet.error) throw packet.error;\n  const result = packet.result;\n  modal(`\n    <div class=\"joker-phase\">\n      <div class=\"phase-icon\">☎</div>\n      <h3>Der Tipp</h3>\n      <div class=\"phone-process\">«Ich würde <strong>${escapeHtml(String(result.guessKey || '').toUpperCase())}</strong> nehmen. Ich bin ungefähr zu <strong>${Number(result.confidence || 0)}%</strong> sicher.»</div>\n"""
+          if old not in s:
+              raise SystemExit('Phone final snippet not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Syntax check
+        run: node --check js/app-v3.js && node --check js/backend-v3.js && node --check js/config-v3.js
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app-v3.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Use exact audience and phone joker timing"
+          git push
