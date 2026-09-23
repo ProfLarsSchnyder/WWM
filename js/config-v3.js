@@ -1,9 +1,9 @@
 // WWM v3 Supabase configuration
-// Fill these two public frontend values once for the deployment.
+// Public frontend values for this deployment.
 // Never put a service_role key in this file.
 
-export const SUPABASE_URL = "";
-export const SUPABASE_PUBLISHABLE_KEY = "";
+export const SUPABASE_URL = "https://xvgbisxwptnfupibcbpg.supabase.co";
+export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_WF742ZbvUE8BzCTT2MZw2w_K2wFvYyt";
 
 export function resolveSupabaseConfig() {
   const direct = {
