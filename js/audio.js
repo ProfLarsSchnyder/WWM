@@ -7,7 +7,7 @@ let unlocked = false;
 let foregroundToken = 0;
 let foregroundDone = null;
 
-const ASSET_VERSION = "2026-09-23-v7";
+const ASSET_VERSION = "2026-09-23-v8";
 
 const AUDIO = {
   intro: ["assets/audio/intro.mp3", { volume: .82 }],
@@ -165,6 +165,82 @@ export function playCue(name, { restart = true, replace = true } = {}) {
       console.warn(`Audio ${name} konnte nicht gestartet werden.`, error);
       done("blocked");
     });
+  });
+}
+
+export function playCueSegment(name, startAt, endAt, { replace = true } = {}) {
+  if (!enabled) return Promise.resolve({ ended: false, reason: "disabled" });
+  const audio = clips.get(name);
+  if (!audio) return Promise.resolve({ ended: false, reason: "missing" });
+
+  const start = Math.max(0, Number(startAt) || 0);
+  const end = Math.max(start, Number(endAt) || start);
+  if (replace) stopForeground();
+
+  const token = ++foregroundToken;
+  foreground = audio;
+
+  return new Promise(resolve => {
+    let settled = false;
+    let timer = null;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+    };
+
+    const done = reason => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (reason === "segment-end") audio.pause();
+      if (foreground === audio && token === foregroundToken) foreground = null;
+      if (foregroundDone === cancel) foregroundDone = null;
+      resolve({ ended: reason === "segment-end" || reason === "ended", reason });
+    };
+
+    const cancel = reason => done(reason || "stopped");
+    const onEnded = () => done("ended");
+    const onError = () => done("error");
+
+    foregroundDone = cancel;
+    audio.addEventListener("ended", onEnded, { once: true });
+    audio.addEventListener("error", onError, { once: true });
+
+    const startPlayback = async () => {
+      try {
+        if (audio.readyState < 1) {
+          await new Promise((resolveMetadata, rejectMetadata) => {
+            const ready = () => { cleanupMetadata(); resolveMetadata(); };
+            const failed = () => { cleanupMetadata(); rejectMetadata(new Error("metadata")); };
+            const cleanupMetadata = () => {
+              audio.removeEventListener("loadedmetadata", ready);
+              audio.removeEventListener("error", failed);
+            };
+            audio.addEventListener("loadedmetadata", ready, { once: true });
+            audio.addEventListener("error", failed, { once: true });
+            audio.load();
+          });
+        }
+
+        audio.currentTime = start;
+        await audio.play();
+        unlocked = true;
+
+        const durationMs = Math.max(0, (end - start) * 1000);
+        timer = window.setTimeout(() => {
+          if (token !== foregroundToken) return done("stopped");
+          try { audio.currentTime = end; } catch {}
+          done("segment-end");
+        }, durationMs);
+      } catch (error) {
+        console.warn(`Audioabschnitt ${name} konnte nicht gestartet werden.`, error);
+        done("blocked");
+      }
+    };
+
+    startPlayback();
   });
 }
 

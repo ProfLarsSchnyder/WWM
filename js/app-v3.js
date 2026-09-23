@@ -1,6 +1,6 @@
 import { parseSimpleText, parseCSV, parseJSON, validateQuestions, shuffleAnswers } from './importer.js';
 import {
-  playCue, startLoop, stopAll, stopLoop, stopForeground,
+  playCue, playCueSegment, startLoop, stopAll, stopLoop, stopForeground,
   pauseLoop, resumeLoop, setAudioEnabled, isAudioEnabled,
   questionTrack
 } from './audio.js';
@@ -925,29 +925,30 @@ function localAudiencePercentages() {
 
 async function useAudience(seq) {
   const resultPromise = jokerResult('audience').then(result => ({ result }), error => ({ error }));
-  playCue('joker-audience');
+  const audioPromise = playCueSegment('joker-audience', 26, 32);
+
   modal(`
     <div class="joker-phase compact-joker-phase">
       <div class="phase-icon">👥</div>
       <h3>Publikumsjoker</h3>
       <div class="phase-copy">Das Publikum stimmt ab.</div>
       <div class="audience-stage"><div class="audience-live-bars"><span></span><span></span><span></span><span></span></div></div>
-      <div class="joker-clock joker-countdown"><strong>5</strong> Sekunden</div>
+      <div class="joker-clock joker-countdown"><strong>6</strong> Sekunden</div>
     </div>`, true);
 
-  for (let remaining = 4; remaining >= 1; remaining--) {
-    await sleep(1000);
-    if (seq !== state.playSeq) return;
+  for (let remaining = 6; remaining >= 1; remaining--) {
     const clock = document.querySelector('.joker-countdown strong');
     if (clock) clock.textContent = String(remaining);
+    await sleep(1000);
+    if (seq !== state.playSeq) return;
   }
-  await sleep(1000);
-  if (seq !== state.playSeq) return;
 
-  // Keep the audience MP3 running: its own transition sound is timed to the reveal.
+  await audioPromise;
+  if (seq !== state.playSeq) return;
   const packet = await resultPromise;
   if (packet.error) throw packet.error;
   const percentages = packet.result.percentages || {};
+
   modal(`
     <div class="joker-result-pop">
       <div class="phase-icon">👥</div>
@@ -974,24 +975,30 @@ function localPhoneResult() {
 
 async function usePhone(seq) {
   const resultPromise = jokerResult('phone').then(result => ({ result }), error => ({ error }));
-  playCue('joker-phone');
-  phonePhase('«Okay ... einen Moment. Ich gehe die Möglichkeiten im Kopf durch.»', '18 Sekunden zum Nachdenken');
+  const audioPromise = playCueSegment('joker-phone', 20, 38);
 
-  await sleep(6000);
+  const thoughtFor = remaining => {
+    if (remaining > 12) return '«Okay ... einen Moment. Ich gehe die Möglichkeiten im Kopf durch.»';
+    if (remaining > 6) return '«Zwei Antworten wirken auf mich eher unwahrscheinlich. Ich versuche es einzugrenzen.»';
+    return '«Ich habe jetzt eine klare Tendenz. Ich prüfe sie noch einmal kurz.»';
+  };
+
+  phonePhase(thoughtFor(18), 18);
+
+  for (let remaining = 18; remaining >= 1; remaining--) {
+    if ([12, 6].includes(remaining)) phonePhase(thoughtFor(remaining), remaining);
+    const clock = document.querySelector('.joker-countdown strong');
+    if (clock) clock.textContent = String(remaining);
+    await sleep(1000);
+    if (seq !== state.playSeq) return;
+  }
+
+  await audioPromise;
   if (seq !== state.playSeq) return;
-  phonePhase('«Zwei Antworten wirken auf mich eher unwahrscheinlich. Ich versuche es einzugrenzen.»', 'Noch 12 Sekunden');
-
-  await sleep(6000);
-  if (seq !== state.playSeq) return;
-  phonePhase('«Ich habe jetzt eine klare Tendenz. Ich prüfe sie noch einmal kurz.»', 'Noch 6 Sekunden');
-
-  await sleep(6000);
-  if (seq !== state.playSeq) return;
-  // Keep the phone MP3 running into the final tip; no extra ping is added.
-
   const packet = await resultPromise;
   if (packet.error) throw packet.error;
   const result = packet.result;
+
   modal(`
     <div class="joker-result-pop">
       <div class="phase-icon">☎</div>
@@ -1001,13 +1008,13 @@ async function usePhone(seq) {
     </div>`, true);
 }
 
-function phonePhase(text, clock) {
+function phonePhase(text, remaining) {
   modal(`
     <div class="joker-phase">
       <div class="phase-icon">☎</div>
       <h3>Telefonjoker</h3>
       <div class="phone-process">${text}</div>
-      <div class="joker-clock">${clock}</div>
+      <div class="joker-clock joker-countdown"><strong>${remaining}</strong> Sekunden</div>
     </div>`, true);
 }
 
