@@ -7,7 +7,7 @@ let unlocked = false;
 let foregroundToken = 0;
 let foregroundDone = null;
 
-const ASSET_VERSION = "2026-09-23-v8";
+const ASSET_VERSION = "2026-09-23-v9";
 
 const AUDIO = {
   intro: ["assets/audio/intro.mp3", { volume: .82 }],
@@ -182,10 +182,10 @@ export function playCueSegment(name, startAt, endAt, { replace = true } = {}) {
 
   return new Promise(resolve => {
     let settled = false;
-    let timer = null;
+    let positionWatcher = null;
 
     const cleanup = () => {
-      if (timer) clearTimeout(timer);
+      if (positionWatcher) clearInterval(positionWatcher);
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
@@ -228,12 +228,13 @@ export function playCueSegment(name, startAt, endAt, { replace = true } = {}) {
         await audio.play();
         unlocked = true;
 
-        const durationMs = Math.max(0, (end - start) * 1000);
-        timer = window.setTimeout(() => {
+        // Do not stop based on wall-clock time. Wait until the media itself
+        // has actually reached the requested endpoint so the complete audio
+        // segment is heard even if seeking/decoding takes a moment.
+        positionWatcher = window.setInterval(() => {
           if (token !== foregroundToken) return done("stopped");
-          try { audio.currentTime = end; } catch {}
-          done("segment-end");
-        }, durationMs);
+          if (audio.currentTime >= end) done("segment-end");
+        }, 20);
       } catch (error) {
         console.warn(`Audioabschnitt ${name} konnte nicht gestartet werden.`, error);
         done("blocked");
