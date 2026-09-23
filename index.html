@@ -7,23 +7,217 @@
   <title>Wer wird Millionär? Unterrichtsquiz</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="styles-v2.css">
+  <link rel="stylesheet" href="styles-v3.css">
 </head>
 <body>
   <div class="ambient" aria-hidden="true"></div>
   <main id="app">
-    <section id="screen-home" class="screen active">
-      <div class="home-shell">
-        <div class="hero-frame">
-          <img src="assets/logo/wwm-logo-sharp.webp" alt="Wer wird Millionär Logo" class="hero-logo">
-        </div>
-        <div class="home-actions">
-          <button class="btn primary" data-action="quick-demo">Demo starten</button>
-          <button class="btn" data-action="new-game">Neues Spiel erstellen</button>
-          <button class="btn" data-action="library">Gespeicherte Spiele</button>
+
+    <section id="screen-mode" class="screen active">
+      <div class="mode-shell">
+        <div class="mode-card">
+          <img src="assets/logo/wwm-logo-sharp.webp" alt="Wer wird Millionär Logo" class="mode-logo">
+          <h1 class="mode-title">Wer wird Millionär?</h1>
+          <p class="mode-subtitle">Wähle deinen Modus</p>
+          <div class="mode-grid">
+            <button class="mode-choice" data-action="open-teacher-login">
+              <span class="mode-icon">🎓</span>
+              <strong>Lehrermodus</strong>
+              <span>Spiele erstellen, am Beamer spielen, für Klassen hosten und Lernstände analysieren.</span>
+            </button>
+            <button class="mode-choice" data-action="open-student-login">
+              <span class="mode-icon">🎮</span>
+              <strong>Lernendenmodus</strong>
+              <span>Mit Name, Klasse und Spielcode einem freigegebenen Quiz beitreten.</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
 
+    <section id="screen-teacher-login" class="screen">
+      <div class="auth-shell">
+        <form class="auth-card" id="teacher-login-form">
+          <p class="eyebrow">Lehrermodus</p>
+          <h2>Passwort eingeben</h2>
+          <p class="form-note">Der Lehrermodus ist geschützt.</p>
+          <label class="field-label" for="teacher-pin">Passwort</label>
+          <input id="teacher-pin" class="text-input pin-input" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password" placeholder="••••">
+          <div id="teacher-login-error" class="form-error"></div>
+          <div class="auth-actions">
+            <button class="btn ghost" type="button" data-action="back-to-mode">Zurück</button>
+            <button class="btn primary" type="submit">Anmelden</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="screen-teacher" class="screen">
+      <div class="teacher-shell">
+        <header class="teacher-head">
+          <div class="teacher-brand">
+            <img src="assets/logo/wwm-logo-sharp.webp" alt="">
+            <div>
+              <h1>Lehrermodus</h1>
+              <p>Spiele verwalten, präsentieren und hosten</p>
+            </div>
+          </div>
+          <div class="teacher-actions">
+            <button class="btn" data-action="teacher-refresh">Aktualisieren</button>
+            <button class="btn ghost" data-action="teacher-logout">Abmelden</button>
+          </div>
+        </header>
+
+        <div class="teacher-nav">
+          <button class="nav-card" data-action="teacher-new-game"><strong>＋ Neues Spiel</strong><span>Fragen einfügen, automatisch erkennen und bearbeiten.</span></button>
+          <button class="nav-card" data-action="teacher-show-games"><strong>🎯 Meine Spiele</strong><span>Beamer, Hosting, Bearbeiten, Duplizieren und Löschen.</span></button>
+          <button class="nav-card" data-action="teacher-open-dashboard"><strong>📊 Live Analyse</strong><span>Spielstände und Ergebnisse der Lernenden sehen.</span></button>
+          <button class="nav-card" data-action="teacher-history"><strong>🕘 Verlauf</strong><span>Vergangene gehostete Durchläufe ansehen.</span></button>
+        </div>
+
+        <section class="teacher-section" id="teacher-main-section">
+          <div class="teacher-section-head">
+            <div>
+              <h2 id="teacher-section-title">Meine Spiele</h2>
+              <div id="teacher-section-subtitle" class="section-muted"></div>
+            </div>
+            <button class="btn primary" data-action="teacher-new-game">Neues Spiel</button>
+          </div>
+          <div id="teacher-games" class="game-grid-v3"></div>
+          <div id="teacher-empty" class="empty-state hidden">
+            <h3>Noch keine Spiele</h3>
+            <p>Erstelle deinen ersten Fragensatz.</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="screen-editor-v3" class="screen">
+      <div class="editor-v3-wrap">
+        <header class="editor-v3-head">
+          <div>
+            <p class="eyebrow">Lehrermodus</p>
+            <h1 id="editor-v3-title">Neues Spiel</h1>
+          </div>
+          <div class="teacher-actions">
+            <button class="btn ghost" data-action="editor-cancel">Zurück</button>
+            <button class="btn primary" data-action="editor-save">Speichern</button>
+          </div>
+        </header>
+
+        <div class="editor-v3-layout">
+          <section class="editor-v3-panel">
+            <label class="field-label" for="editor-game-title">Titel des Spiels</label>
+            <input id="editor-game-title" class="text-input" type="text" placeholder="z. B. Angebot und Nachfrage">
+
+            <div class="import-tabs-v3">
+              <button class="btn small active" data-import-v3="simple">Einfach</button>
+              <button class="btn small" data-import-v3="csv">Excel / CSV</button>
+              <button class="btn small" data-import-v3="json">JSON</button>
+            </div>
+
+            <div class="import-pane-v3 active" data-import-pane-v3="simple">
+              <p class="import-help">Am einfachsten: pro Frage fünf Zeilen. Zuerst die Frage, dann die richtige Antwort, danach drei falsche Antworten. Zwischen zwei Fragen eine Leerzeile.</p>
+              <textarea id="editor-import-simple" class="big-input-v3" spellcheck="false" placeholder="Was versteht man unter Inflation?&#10;Anstieg des allgemeinen Preisniveaus&#10;Sinkende Arbeitslosigkeit&#10;Steigendes reales BIP&#10;Sinkende Staatsausgaben&#10;&#10;Was ist ein Substitutionsgut zu Butter?&#10;Margarine&#10;Brot&#10;Milch&#10;Salz"></textarea>
+            </div>
+
+            <div class="import-pane-v3" data-import-pane-v3="csv">
+              <p class="import-help">Spalten: Frage, Richtig, Falsch 1, Falsch 2, Falsch 3. Direkt aus Excel einfügen.</p>
+              <textarea id="editor-import-csv" class="big-input-v3" spellcheck="false" placeholder="Frage&#9;Richtig&#9;Falsch 1&#9;Falsch 2&#9;Falsch 3"></textarea>
+            </div>
+
+            <div class="import-pane-v3" data-import-pane-v3="json">
+              <p class="import-help">JSON Import bleibt für bestehende Fragensätze verfügbar.</p>
+              <textarea id="editor-import-json" class="big-input-v3" spellcheck="false" placeholder='[{"question":"...","correct":"...","wrong":["...","...","..."]}]'></textarea>
+            </div>
+
+            <div class="editor-actions">
+              <button class="btn" data-action="editor-example">Beispiel</button>
+              <button class="btn primary" data-action="editor-import">Fragen übernehmen</button>
+            </div>
+          </section>
+
+          <section class="editor-v3-panel">
+            <div class="panel-title-row">
+              <div>
+                <p class="eyebrow">Fragen</p>
+                <h3><span id="editor-question-count">0</span> Fragen</h3>
+              </div>
+              <button class="btn small" data-action="editor-add-question">＋ Frage</button>
+            </div>
+            <div id="editor-question-list" class="question-list-v3"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-host" class="screen">
+      <div class="teacher-shell">
+        <header class="teacher-head">
+          <div class="teacher-brand">
+            <img src="assets/logo/wwm-logo-sharp.webp" alt="">
+            <div>
+              <h1>Live Analyse</h1>
+              <p id="host-game-name">Gehostetes Spiel</p>
+            </div>
+          </div>
+          <div class="teacher-actions">
+            <button class="btn" data-action="host-refresh">Jetzt aktualisieren</button>
+            <button class="btn danger-btn" data-action="host-stop">Hosting beenden</button>
+            <button class="btn ghost" data-action="host-back">Zurück</button>
+          </div>
+        </header>
+
+        <div class="host-layout">
+          <aside class="host-code-card">
+            <div class="join-code-label">Spielcode</div>
+            <div id="host-join-code" class="join-code">------</div>
+            <div id="host-title" class="host-title"></div>
+            <div class="host-hint">Lernende wählen auf der Startseite den Lernendenmodus und geben diesen Code zusammen mit Name und Klasse ein.</div>
+            <div class="refresh-line">Automatische Aktualisierung alle 30 Sekunden. <span id="host-last-refresh"></span></div>
+          </aside>
+
+          <div>
+            <div class="metric-grid">
+              <div class="metric"><strong id="metric-total">0</strong><span>Teilnehmende</span></div>
+              <div class="metric"><strong id="metric-online">0</strong><span>Online</span></div>
+              <div class="metric"><strong id="metric-active">0</strong><span>Im Spiel</span></div>
+              <div class="metric"><strong id="metric-completed">0</strong><span>Beendet</span></div>
+              <div class="metric"><strong id="metric-eliminated">0</strong><span>Ausgeschieden</span></div>
+              <div class="metric"><strong id="metric-average">0</strong><span>Ø Frage</span></div>
+            </div>
+
+            <div class="dashboard-table-wrap">
+              <table class="dashboard-table">
+                <thead><tr><th>Name</th><th>Klasse</th><th>Fortschritt</th><th>Richtig</th><th>Joker</th><th>Status</th><th>Aktivität</th></tr></thead>
+                <tbody id="dashboard-participants"></tbody>
+              </table>
+            </div>
+
+            <div id="dashboard-questions" class="question-analysis"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-student-login" class="screen">
+      <div class="student-join-shell">
+        <form class="student-join-card" id="student-login-form">
+          <img src="assets/logo/wwm-logo-sharp.webp" alt="Wer wird Millionär Logo" class="student-logo">
+          <h2>Spiel beitreten</h2>
+          <div class="student-fields">
+            <label>Name<input id="student-name" class="text-input" maxlength="80" autocomplete="name" placeholder="Vorname und Nachname"></label>
+            <label>Klasse<input id="student-class" class="text-input" maxlength="60" autocomplete="off" placeholder="z. B. BM26D"></label>
+            <label>Spielcode<input id="student-code" class="text-input code-input" maxlength="12" autocomplete="off" placeholder="CODE"></label>
+          </div>
+          <div id="student-login-error" class="form-error"></div>
+          <div class="student-join-actions">
+            <button class="btn ghost" type="button" data-action="back-to-mode">Zurück</button>
+            <button class="btn primary" type="submit">Beitreten</button>
+          </div>
+        </form>
+      </div>
+    </section>
 
     <section id="screen-game-intro" class="screen game-intro-screen">
       <div class="game-intro-shell">
@@ -33,95 +227,20 @@
         </div>
         <div class="game-intro-card">
           <p class="eyebrow">Wer wird Millionär?</p>
-          <h2 id="intro-game-title">Bereit für das Spiel?</h2>
-          <label class="contestant-label" for="contestant-name">Wer sitzt auf dem heissen Stuhl?</label>
+          <h2 id="intro-game-title">Bereit?</h2>
+          <div id="intro-student-chip" class="student-name-chip hidden"></div>
+          <label id="contestant-label" class="contestant-label" for="contestant-name">Wer sitzt auf dem heissen Stuhl?</label>
           <input id="contestant-name" class="contestant-input" type="text" maxlength="40" autocomplete="off" placeholder="Name eingeben">
-          <div id="intro-audio-status" class="intro-audio-status">Das Intro startet ...</div>
-          <div class="intro-progress"><span id="intro-progress-bar"></span></div>
+          <p id="intro-copy" class="student-intro-copy"></p>
           <div class="game-intro-actions">
             <button class="btn ghost" data-action="cancel-game-intro">Zurück</button>
-            <button class="btn primary intro-start-btn" data-action="begin-questions" id="begin-questions" disabled>Zur ersten Frage</button>
+            <button class="btn primary intro-start-btn ready" data-action="begin-questions" id="begin-questions">Spiel starten</button>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="screen-library" class="screen">
-      <header class="page-head">
-        <button class="btn ghost" data-action="home">← Start</button>
-        <div>
-          <p class="eyebrow">Meine Spiele</p>
-          <h2>Gespeicherte Fragensätze</h2>
-        </div>
-        <button class="btn primary" data-action="new-game">Neues Spiel</button>
-      </header>
-      <div id="library-list" class="game-grid"></div>
-      <div id="library-empty" class="empty-state hidden">
-        <h3>Noch keine Spiele gespeichert</h3>
-        <p>Erstelle deinen ersten Fragensatz.</p>
-        <button class="btn primary" data-action="new-game">Spiel erstellen</button>
-      </div>
-    </section>
-
-    <section id="screen-editor" class="screen">
-      <header class="page-head">
-        <button class="btn ghost" data-action="home">← Start</button>
-        <div>
-          <p class="eyebrow">Frageneditor</p>
-          <h2 id="editor-heading">Neues Spiel</h2>
-        </div>
-        <div class="head-actions">
-          <button class="btn" data-action="preview-import">Import prüfen</button>
-          <button class="btn primary" data-action="save-game">Speichern</button>
-        </div>
-      </header>
-
-      <div class="editor-layout">
-        <section class="panel editor-panel">
-          <label class="field-label" for="game-title">Titel des Spiels</label>
-          <input id="game-title" class="text-input" type="text" placeholder="z. B. VWL Angebot und Nachfrage">
-
-          <div class="import-tabs" role="tablist">
-            <button class="tab active" data-import-tab="simple">Einfacher Text</button>
-            <button class="tab" data-import-tab="csv">Excel / CSV</button>
-            <button class="tab" data-import-tab="json">JSON</button>
-          </div>
-
-          <div class="import-pane active" data-import-pane="simple">
-            <p class="microcopy">Pro Frage: Frage, richtige Antwort und drei falsche Antworten. Zwischen Fragen eine Leerzeile.</p>
-            <textarea id="simple-import" class="big-input" spellcheck="false" placeholder="Frage: Was versteht man unter Inflation?&#10;Richtig: Anstieg des allgemeinen Preisniveaus&#10;Falsch: Rückgang der Arbeitslosigkeit&#10;Falsch: Zunahme des realen BIP&#10;Falsch: Sinkende Staatsausgaben"></textarea>
-          </div>
-
-          <div class="import-pane" data-import-pane="csv">
-            <p class="microcopy">Spalten: Frage, Richtig, Falsch 1, Falsch 2, Falsch 3. Zeilen können direkt aus Excel eingefügt werden.</p>
-            <textarea id="csv-import" class="big-input" spellcheck="false" placeholder="Frage\tRichtig\tFalsch 1\tFalsch 2\tFalsch 3"></textarea>
-          </div>
-
-          <div class="import-pane" data-import-pane="json">
-            <p class="microcopy">Unterstützt frage, richtig und falsch oder a, b, c, d plus richtig.</p>
-            <textarea id="json-import" class="big-input" spellcheck="false" placeholder='[{"frage":"...","richtig":"...","falsch":["...","...","..."]}]'></textarea>
-          </div>
-
-          <div class="editor-actions">
-            <button class="btn" data-action="load-example">Beispiel einsetzen</button>
-            <button class="btn primary" data-action="import-questions">Fragen übernehmen</button>
-          </div>
-        </section>
-
-        <section class="panel question-panel">
-          <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">Fragen</p>
-              <h3><span id="question-count">0</span> Fragen im Spiel</h3>
-            </div>
-            <button class="btn small" data-action="add-question">+ Frage</button>
-          </div>
-          <div id="question-list" class="question-list"></div>
-        </section>
-      </div>
-    </section>
-
-    <section id="screen-game" class="screen game-screen">
+    <section id="screen-game" class="screen game-screen" data-mode="beamer">
       <header class="game-topbar">
         <div class="mini-brand">
           <img src="assets/logo/wwm-logo-sharp.webp" alt="" class="mini-logo">
@@ -129,6 +248,7 @@
             <strong id="game-title-display">Unterrichtsquiz</strong>
             <small id="contestant-display" class="contestant-display"></small>
             <small id="question-progress">Frage 1 von 15</small>
+            <span id="game-mode-badge" class="game-mode-badge"></span>
           </div>
         </div>
         <div class="top-controls">
@@ -162,32 +282,28 @@
         </aside>
       </div>
     </section>
+
+    <section id="screen-result" class="screen">
+      <div class="result-screen">
+        <div class="result-card">
+          <img src="assets/logo/wwm-logo-sharp.webp" alt="Wer wird Millionär Logo">
+          <div id="result-kicker" class="result-kicker">Spiel beendet</div>
+          <div id="result-money" class="result-money">0 €</div>
+          <div id="result-copy"></div>
+          <div class="result-actions">
+            <button id="result-primary" class="btn primary" data-action="result-primary">Weiter</button>
+            <button class="btn ghost" data-action="back-to-mode">Startseite</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <div id="modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
     <div id="modal-content" class="modal-card"></div>
   </div>
 
-  <template id="question-editor-template">
-    <article class="question-card">
-      <div class="question-card-head">
-        <strong class="question-number"></strong>
-        <div class="question-tools">
-          <button class="icon-button" data-q-action="up" title="Nach oben">↑</button>
-          <button class="icon-button" data-q-action="down" title="Nach unten">↓</button>
-          <button class="icon-button danger" data-q-action="delete" title="Löschen">×</button>
-        </div>
-      </div>
-      <label>Frage<textarea data-field="question"></textarea></label>
-      <label class="correct-label">Richtige Antwort<input data-field="correct" type="text"></label>
-      <div class="wrong-grid">
-        <label>Falsch 1<input data-field="wrong0" type="text"></label>
-        <label>Falsch 2<input data-field="wrong1" type="text"></label>
-        <label>Falsch 3<input data-field="wrong2" type="text"></label>
-      </div>
-    </article>
-  </template>
-
-  <script type="module" src="js/app-v2.js"></script>
+  <script type="module" src="js/app-v3.js"></script>
 </body>
 </html>
