@@ -3,37 +3,113 @@ function clean(value) {
 }
 
 export function parseSimpleText(text) {
-  const blocks = String(text)
-    .replace(/\r/g, "")
-    .split(/\n\s*\n+/)
-    .map(block => block.trim())
-    .filter(Boolean);
+  const blocks = splitSimpleBlocks(String(text).replace(/\r/g, ""));
+  const questions = blocks.map(parseSimpleBlock).filter(Boolean);
+  return validateQuestions(questions);
+}
 
-  const questions = [];
+function splitSimpleBlocks(text) {
+  const blocks = [];
+  let current = [];
+  const push = () => {
+    const block = current.join("\n").trim();
+    if (block) blocks.push(block);
+    current = [];
+  };
 
-  for (const block of blocks) {
-    const lines = block.split("\n").map(line => line.trim()).filter(Boolean);
-    let question = "";
-    let correct = "";
-    const wrong = [];
-
-    for (const line of lines) {
-      const match = line.match(/^([^:]+):\s*(.*)$/);
-      if (!match) continue;
-      const label = match[1].trim().toLowerCase();
-      const value = match[2].trim();
-
-      if (["frage", "question", "q"].includes(label)) question = value;
-      else if (["richtig", "korrekt", "correct", "lösung", "loesung"].includes(label)) correct = value;
-      else if (label.startsWith("falsch") || label.startsWith("wrong")) wrong.push(value);
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) {
+      push();
+      continue;
     }
+    if (/^(frage|question|q)\s*:/i.test(line) && current.length) push();
+    current.push(line);
+  }
+  push();
+  return blocks;
+}
 
-    if (question || correct || wrong.length) {
-      questions.push(normalizeQuestion({ question, correct, wrong }));
+function parseSimpleBlock(block) {
+  const lines = block.split("\n").map(line => line.trim()).filter(Boolean);
+  if (!lines.length) return null;
+
+  // Einzeilige Tabellenform: Frage | Richtig | Falsch | Falsch | Falsch
+  if (lines.length === 1) {
+    const delimiter = lines[0].includes("\t") ? "\t" : lines[0].includes("|") ? "|" : null;
+    if (delimiter) {
+      const cells = lines[0].split(delimiter).map(clean).filter(Boolean);
+      if (cells.length >= 5) return normalizeQuestion({ question: cells[0], correct: cells[1], wrong: cells.slice(2, 5) });
     }
   }
 
-  return validateQuestions(questions);
+  let question = "";
+  let correct = "";
+  const wrong = [];
+  let labelledHits = 0;
+
+  for (const line of lines) {
+    const match = line.match(/^([^:]+):\s*(.*)$/);
+    if (!match) continue;
+    const label = match[1].trim().toLowerCase();
+    const value = match[2].trim();
+
+    if (["frage", "question", "q"].includes(label)) {
+      question = value;
+      labelledHits++;
+    } else if (["richtig", "korrekt", "correct", "lösung", "loesung", "r"].includes(label)) {
+      correct = value;
+      labelledHits++;
+    } else if (label.startsWith("falsch") || label.startsWith("wrong") || /^f\d*$/.test(label)) {
+      wrong.push(value);
+      labelledHits++;
+    }
+  }
+
+  if (labelledHits) return normalizeQuestion({ question, correct, wrong });
+
+  // Sehr einfaches Format mit Markierungen:
+  // Frage
+  // * richtige Antwort
+  // - falsche Antwort
+  // - falsche Antwort
+  // - falsche Antwort
+  const bulletQuestion = stripQuestionPrefix(lines[0]);
+  let bulletCorrect = "";
+  const bulletWrong = [];
+  for (const line of lines.slice(1)) {
+    if (/^(\*|✓|✔|\+)\s+/.test(line)) bulletCorrect = stripAnswerMarker(line);
+    else if (/^(-|–|—|•|✗|✘|x)\s+/i.test(line)) bulletWrong.push(stripAnswerMarker(line));
+  }
+  if (bulletCorrect || bulletWrong.length) {
+    return normalizeQuestion({ question: bulletQuestion, correct: bulletCorrect, wrong: bulletWrong });
+  }
+
+  // Minimalformat ohne Bezeichnungen: genau fünf Zeilen.
+  // 1 Frage, 2 richtige Antwort, 3 bis 5 falsche Antworten.
+  if (lines.length >= 5) {
+    return normalizeQuestion({
+      question: stripQuestionPrefix(lines[0]),
+      correct: stripAnswerMarker(lines[1]),
+      wrong: lines.slice(2, 5).map(stripAnswerMarker)
+    });
+  }
+
+  return normalizeQuestion({ question: bulletQuestion, correct: "", wrong: [] });
+}
+
+function stripQuestionPrefix(value) {
+  return clean(value)
+    .replace(/^\s*\d+[.)]\s*/, "")
+    .replace(/^\s*(frage|question|q)\s*[:.-]?\s*/i, "")
+    .trim();
+}
+
+function stripAnswerMarker(value) {
+  return clean(value)
+    .replace(/^\s*(\*|✓|✔|\+|-|–|—|•|✗|✘|x)\s*/i, "")
+    .replace(/^\s*[A-D][.)]\s*/i, "")
+    .trim();
 }
 
 export function parseCSV(text) {
