@@ -1,0 +1,28 @@
+name: Phone joker legacy fallback
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/phone-legacy-fallback-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply fallback patch
+        run: python .github/scripts/phone_legacy_fallback.py
+      - name: Check JavaScript
+        run: node --check js/app-v3.js
+      - name: Commit fallback
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app-v3.js
+          git commit -m "Add safe legacy phone joker fallback"
+          git push
