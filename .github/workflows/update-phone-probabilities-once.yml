@@ -1,0 +1,28 @@
+name: Update phone probabilities once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/update-phone-probabilities-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply update
+        run: python .github/scripts/update_phone_probabilities.py
+      - name: Check JavaScript
+        run: node --check js/app-v3.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app-v3.js styles-v3.css index.html supabase/schema.sql supabase/phone-joker-update.sql
+          git commit -m "Set phone joker probability table and compact result text"
+          git push
