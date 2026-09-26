@@ -987,13 +987,24 @@ function audienceBars(percentages) {
 }
 
 function phoneOutcomeProbabilities(index) {
-  const uncertainty = Math.min(.70, .18 + index * .035);
-  const unknown = Math.min(.30, .03 + index * .018);
-  return {
-    certain: 1 - uncertainty,
-    between: uncertainty - unknown,
-    unknown
-  };
+  const table = [
+    { certain:1.00, between:0.00, unknown:0.00 }, // 50
+    { certain:0.96, between:0.04, unknown:0.00 }, // 100
+    { certain:0.92, between:0.07, unknown:0.01 }, // 200
+    { certain:0.88, between:0.10, unknown:0.02 }, // 300
+    { certain:0.84, between:0.12, unknown:0.04 }, // 500
+    { certain:0.80, between:0.15, unknown:0.05 }, // 1'000
+    { certain:0.75, between:0.18, unknown:0.07 }, // 2'000
+    { certain:0.70, between:0.22, unknown:0.08 }, // 4'000
+    { certain:0.65, between:0.25, unknown:0.10 }, // 8'000
+    { certain:0.58, between:0.28, unknown:0.14 }, // 16'000
+    { certain:0.50, between:0.32, unknown:0.18 }, // 32'000
+    { certain:0.43, between:0.35, unknown:0.22 }, // 64'000
+    { certain:0.36, between:0.38, unknown:0.26 }, // 125'000
+    { certain:0.28, between:0.40, unknown:0.32 }, // 500'000
+    { certain:0.22, between:0.40, unknown:0.38 }  // 1'000'000
+  ];
+  return table[Math.min(Math.max(index, 0), table.length - 1)];
 }
 
 function localPhoneResult() {
