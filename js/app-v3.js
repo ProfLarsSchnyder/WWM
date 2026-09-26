@@ -1043,9 +1043,10 @@ async function usePhone(seq) {
   const result = packet.result;
 
   let phoneText;
-  if (result.outcome === 'between' && Array.isArray(result.keys) && result.keys.length >= 2) {
+  const phoneOutcome = result.outcome || 'unknown';
+  if (phoneOutcome === 'between' && Array.isArray(result.keys) && result.keys.length >= 2) {
     phoneText = `«Ich schwanke zwischen <strong>${escapeHtml(String(result.keys[0]).toUpperCase())}</strong> und <strong>${escapeHtml(String(result.keys[1]).toUpperCase())}</strong>. Mehr kann ich leider nicht eingrenzen.»`;
-  } else if (result.outcome === 'unknown') {
+  } else if (phoneOutcome === 'unknown') {
     phoneText = '«Tut mir leid, ich weiss es wirklich nicht. Ich möchte dich hier nicht in die falsche Richtung schicken.»';
   } else {
     phoneText = `«Ich bin mir sicher: Die richtige Antwort ist <strong>${escapeHtml(String(result.guessKey || '').toUpperCase())}</strong>.»`;
