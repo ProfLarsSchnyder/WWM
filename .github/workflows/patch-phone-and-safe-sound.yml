@@ -1,0 +1,28 @@
+name: Patch phone joker and safe sound
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/patch-phone-and-safe-sound.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply patch
+        run: python .github/scripts/patch_phone_and_safe_sound.py
+      - name: Check JavaScript
+        run: node --check js/app-v3.js
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/app-v3.js supabase/schema.sql supabase/phone-joker-update.sql
+          git commit -m "Improve phone joker and 16000 safe sound"
+          git push
