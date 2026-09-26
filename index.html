@@ -23,7 +23,7 @@
             <button class="mode-choice" data-action="open-teacher-login">
               <span class="mode-icon">🎓</span>
               <strong>Lehrermodus</strong>
-              <span>Spiele erstellen, am Beamer spielen, für Klassen hosten und Lernstände analysieren.</span>
+              <span>Spiele erstellen, am Beamer spielen, Codes anzeigen und Lernstände analysieren.</span>
             </button>
             <button class="mode-choice" data-action="open-student-login">
               <span class="mode-icon">🎮</span>
@@ -70,7 +70,7 @@
 
         <div class="teacher-nav">
           <button class="nav-card" data-action="teacher-new-game"><strong>＋ Neues Spiel</strong><span>Fragen einfügen, automatisch erkennen und bearbeiten.</span></button>
-          <button class="nav-card" data-action="teacher-show-games"><strong>🎯 Meine Spiele</strong><span>Beamer, Hosting, Bearbeiten, Duplizieren und Löschen.</span></button>
+          <button class="nav-card" data-action="teacher-show-games"><strong>🎯 Meine Spiele</strong><span>Beamer, Spielcode, Bearbeiten, Duplizieren und Löschen.</span></button>
           <button class="nav-card" data-action="teacher-open-dashboard"><strong>📊 Live Analyse</strong><span>Spielstände und Ergebnisse der Lernenden sehen.</span></button>
           <button class="nav-card" data-action="teacher-history"><strong>🕘 Verlauf</strong><span>Vergangene gehostete Durchläufe ansehen.</span></button>
         </div>
@@ -158,12 +158,11 @@
             <img src="assets/logo/wwm-logo-sharp.webp" alt="">
             <div>
               <h1>Live Analyse</h1>
-              <p id="host-game-name">Gehostetes Spiel</p>
+              <p id="host-game-name">Spielanalyse</p>
             </div>
           </div>
           <div class="teacher-actions">
             <button class="btn" data-action="host-refresh">Jetzt aktualisieren</button>
-            <button class="btn danger-btn" data-action="host-stop">Hosting beenden</button>
             <button class="btn ghost" data-action="host-back">Zurück</button>
           </div>
         </header>
@@ -174,7 +173,7 @@
             <div id="host-join-code" class="join-code">------</div>
             <div id="host-title" class="host-title"></div>
             <button class="btn primary host-code-big-btn" data-action="host-code-big">Code gross anzeigen</button>
-            <div class="host-hint">Lernende wählen auf der Startseite den Lernendenmodus und geben diesen Code zusammen mit Name und Klasse ein.</div>
+            <div class="host-hint">Lernende wählen auf der Startseite den Lernendenmodus und geben den dauerhaften Code des gewünschten Spiels zusammen mit Name und Klasse ein.</div>
             <div class="refresh-line">Automatische Aktualisierung alle 30 Sekunden. <span id="host-last-refresh"></span></div>
           </aside>
 
@@ -305,6 +304,6 @@
     <div id="modal-content" class="modal-card"></div>
   </div>
 
-  <script type="module" src="js/app-v3.js?v=20260926-phone3"></script>
+  <script type="module" src="js/app-v3.js?v=20260926-codes1"></script>
 </body>
 </html>

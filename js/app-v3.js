@@ -6,7 +6,7 @@ import {
 } from './audio.js';
 import {
   isBackendConfigured, teacherToken, teacherLogin, teacherLogout,
-  teacherGamesList, teacherGameSave, teacherGameDelete, teacherHostGame,
+  teacherGamesList, teacherGameSave, teacherGameDelete,
   teacherStopHost, teacherDashboard, teacherSessionHistory,
   studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
@@ -117,9 +117,9 @@ async function handleAction(action, button) {
     const game = gameById(button.dataset.id);
     if (game) startBeamer(game);
   }
-  if (action === 'game-host') {
+  if (action === 'game-code') {
     const game = gameById(button.dataset.id);
-    if (game) await hostGame(game);
+    if (game) showGameCode(game);
   }
   if (action === 'game-edit') {
     const game = gameById(button.dataset.id);
@@ -223,10 +223,10 @@ function renderTeacherGames() {
     const questionCount = Array.isArray(game.questions) ? game.questions.length : 0;
     card.innerHTML = `
       <h3></h3>
-      <div class="game-card-meta">${questionCount} Fragen · geändert ${formatDate(game.updatedAt)}</div>
+      <div class="game-card-meta">${questionCount} Fragen · Code ${escapeHtml(game.joinCode || '------')} · geändert ${formatDate(game.updatedAt)}</div>
       <div class="game-card-actions">
         <button class="btn primary" data-action="game-beamer" data-id="${game.id}">Beamer</button>
-        <button class="btn" data-action="game-host" data-id="${game.id}">Für Lernende hosten</button>
+        <button class="btn" data-action="game-code" data-id="${game.id}">Code anzeigen</button>
         <button class="btn" data-action="game-edit" data-id="${game.id}">Bearbeiten</button>
         <button class="btn" data-action="game-duplicate" data-id="${game.id}">Duplizieren</button>
         <button class="btn danger-btn" data-action="game-delete" data-id="${game.id}">Löschen</button>
@@ -389,14 +389,19 @@ async function saveEditor() {
   await openTeacherHome();
 }
 
-async function hostGame(game) {
-  const result = await teacherHostGame(game.id);
-  $('#host-game-name').textContent = result.title || game.title;
-  $('#host-title').textContent = result.title || game.title;
-  $('#host-join-code').textContent = result.joinCode || '------';
-  showScreen('host');
-  await refreshDashboard();
-  startDashboardPolling();
+function showGameCode(game) {
+  const code = game.joinCode || '------';
+  modal(`
+    <div class="code-presenter-modal">
+      <div class="code-presenter-label">Spielcode</div>
+      <div class="code-presenter-code">${escapeHtml(code)}</div>
+      <div class="code-presenter-title">${escapeHtml(game.title || 'Spiel')}</div>
+      <div class="code-presenter-hint">Dieser Code bleibt dauerhaft gültig. Lernende können das Spiel jederzeit im Lernendenmodus starten.</div>
+      <div class="modal-actions">
+        <button class="btn" data-action="fullscreen">Vollbild</button>
+        <button class="btn primary" data-modal="close">Schliessen</button>
+      </div>
+    </div>`, false, true);
 }
 
 function showHostCode() {
@@ -420,8 +425,8 @@ async function openDashboard() {
   if (!dashboard?.active) {
     modal(`
       <p class="eyebrow">Live Analyse</p>
-      <h3>Kein Spiel wird gehostet</h3>
-      <p>Starte bei einem gespeicherten Spiel «Für Lernende hosten».</p>
+      <h3>Noch keine Lernenden aktiv</h3>
+      <p>Sobald jemand eines der Spiele über seinen dauerhaften Code startet, erscheint die Aktivität hier.</p>
       <div class="modal-actions"><button class="btn primary" data-modal="close">OK</button></div>`);
     return;
   }
@@ -446,7 +451,7 @@ async function refreshDashboard() {
   const data = await teacherDashboard();
   if (!data?.active) {
     stopDashboardPolling();
-    toast('Momentan wird kein Spiel gehostet.');
+    toast('Momentan ist noch keine Spielaktivität vorhanden.');
     return openTeacherHome();
   }
   renderDashboard(data);
@@ -455,7 +460,7 @@ async function refreshDashboard() {
 function renderDashboard(data) {
   const session = data.session || {};
   const summary = data.summary || {};
-  $('#host-game-name').textContent = session.title || 'Gehostetes Spiel';
+  $('#host-game-name').textContent = session.title || 'Spielanalyse';
   $('#host-title').textContent = session.title || '';
   $('#host-join-code').textContent = session.joinCode || '------';
   $('#metric-total').textContent = summary.total ?? 0;

@@ -21,6 +21,7 @@ create table if not exists public.wwm_app_settings (
 create table if not exists public.wwm_quiz_games (
   id uuid primary key default extensions.gen_random_uuid(),
   title text not null,
+  join_code text unique,
   questions jsonb not null default '[]'::jsonb,
   archived boolean not null default false,
   created_at timestamptz not null default now(),
@@ -102,6 +103,20 @@ on conflict (singleton) do nothing;
 -- ============================================================
 -- INTERNE HELFER
 -- ============================================================
+
+create or replace function public.wwm_generate_game_code()
+returns text language plpgsql security definer
+set search_path = public, extensions
+as $$
+declare c text;
+begin
+  loop
+    c := upper(substr(encode(extensions.gen_random_bytes(4), 'hex'), 1, 6));
+    exit when not exists (select 1 from public.wwm_quiz_games where join_code = c);
+  end loop;
+  return c;
+end;
+$$;
 
 create or replace function public.wwm_hash_secret(p_secret text)
 returns text language sql immutable strict security definer
@@ -231,7 +246,7 @@ declare result jsonb;
 begin
   perform public.wwm_assert_teacher(p_token);
   select coalesce(jsonb_agg(jsonb_build_object(
-    'id',id,'title',title,'questions',questions,'createdAt',created_at,'updatedAt',updated_at
+    'id',id,'title',title,'joinCode',join_code,'questions',questions,'createdAt',created_at,'updatedAt',updated_at
   ) order by updated_at desc),'[]'::jsonb) into result
   from public.wwm_quiz_games where archived = false;
   return result;
@@ -242,7 +257,7 @@ create or replace function public.wwm_teacher_game_save(p_token text, p_game jso
 returns jsonb language plpgsql security definer
 set search_path = public, extensions
 as $$
-declare v_id uuid; v_title text; v_questions jsonb; v_created timestamptz; r public.wwm_quiz_games;
+declare v_id uuid; v_title text; v_questions jsonb; v_created timestamptz; v_code text; r public.wwm_quiz_games;
 begin
   perform public.wwm_assert_teacher(p_token);
   v_title := btrim(coalesce(p_game->>'title',''));
@@ -252,11 +267,13 @@ begin
   begin v_id := nullif(p_game->>'id','')::uuid; exception when others then v_id := null; end;
   if v_id is null then v_id := extensions.gen_random_uuid(); end if;
   begin v_created := coalesce(nullif(p_game->>'createdAt','')::timestamptz, now()); exception when others then v_created := now(); end;
-  insert into public.wwm_quiz_games as g(id,title,questions,archived,created_at,updated_at)
-  values(v_id,v_title,v_questions,false,v_created,now())
+  select join_code into v_code from public.wwm_quiz_games where id=v_id;
+  if v_code is null then v_code := public.wwm_generate_game_code(); end if;
+  insert into public.wwm_quiz_games as g(id,title,join_code,questions,archived,created_at,updated_at)
+  values(v_id,v_title,v_code,v_questions,false,v_created,now())
   on conflict(id) do update set title=excluded.title, questions=excluded.questions, archived=false, updated_at=now()
   returning * into r;
-  return jsonb_build_object('id',r.id,'title',r.title,'questions',r.questions,'createdAt',r.created_at,'updatedAt',r.updated_at);
+  return jsonb_build_object('id',r.id,'title',r.title,'joinCode',r.join_code,'questions',r.questions,'createdAt',r.created_at,'updatedAt',r.updated_at);
 end;
 $$;
 
@@ -316,7 +333,7 @@ begin
   select active_session_id,join_code into sid,code from public.wwm_app_settings where singleton=true;
   if sid is null then return jsonb_build_object('active',false,'joinCode',code,'participants','[]'::jsonb,'questions','[]'::jsonb); end if;
 
-  select h.game_id,h.started_at,g.title,g.questions into gid,started,title,qs
+  select h.game_id,h.started_at,g.title,g.questions,g.join_code into gid,started,title,qs,code
   from public.wwm_host_sessions h join public.wwm_quiz_games g on g.id=h.game_id
   where h.id=sid and h.status='active';
   if not found then
@@ -392,16 +409,22 @@ create or replace function public.wwm_student_preview(p_join_code text)
 returns jsonb language plpgsql security definer
 set search_path = public, extensions
 as $$
-declare expected text; sid uuid; gid uuid; title text; qs jsonb;
+declare sid uuid; gid uuid; title text; qs jsonb; code text;
 begin
-  select join_code,active_session_id into expected,sid from public.wwm_app_settings where singleton=true;
-  if upper(btrim(coalesce(p_join_code,''))) <> expected then raise exception 'Code ist nicht gültig'; end if;
-  if sid is null then raise exception 'Momentan ist kein Spiel geöffnet'; end if;
-  select h.game_id,g.title,g.questions into gid,title,qs
-  from public.wwm_host_sessions h join public.wwm_quiz_games g on g.id=h.game_id
-  where h.id=sid and h.status='active' and g.archived=false;
-  if not found then raise exception 'Momentan ist kein Spiel geöffnet'; end if;
-  return jsonb_build_object('sessionId',sid,'gameId',gid,'title',title,'questionCount',jsonb_array_length(qs));
+  code := upper(btrim(coalesce(p_join_code,'')));
+  select id,title,questions into gid,title,qs
+  from public.wwm_quiz_games
+  where join_code=code and archived=false;
+  if not found then raise exception 'Code ist nicht gültig'; end if;
+
+  select id into sid from public.wwm_host_sessions
+  where game_id=gid and status='active'
+  order by started_at desc limit 1;
+  if sid is null then
+    insert into public.wwm_host_sessions(game_id,status) values(gid,'active') returning id into sid;
+  end if;
+
+  return jsonb_build_object('sessionId',sid,'gameId',gid,'title',title,'joinCode',code,'questionCount',jsonb_array_length(qs));
 end;
 $$;
 
@@ -419,6 +442,7 @@ begin
   token:=encode(extensions.gen_random_bytes(32),'hex');
   insert into public.wwm_participants(session_id,game_id,student_name,class_name,token_hash)
   values(sid,gid,sname,cname,public.wwm_hash_secret(token)) returning id into pid;
+  update public.wwm_app_settings set active_session_id=sid,updated_at=now() where singleton=true;
   return jsonb_build_object(
     'participantId',pid,'participantToken',token,'sessionId',sid,'gameId',gid,
     'title',preview->>'title','questionCount',(preview->>'questionCount')::integer,
@@ -618,6 +642,7 @@ $$;
 -- RECHTE
 -- ============================================================
 
+revoke all on function public.wwm_generate_game_code() from public,anon,authenticated;
 revoke all on function public.wwm_hash_secret(text) from public,anon,authenticated;
 revoke all on function public.wwm_assert_teacher(text) from public,anon,authenticated;
 revoke all on function public.wwm_assert_participant(uuid,text) from public,anon,authenticated;
