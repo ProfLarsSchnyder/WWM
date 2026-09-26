@@ -526,7 +526,7 @@ as $$
 declare
   p public.wwm_participants; typ text; qs jsonb; q jsonb; ckey text; wrong_keys text[]; result jsonb;
   cp integer; rem integer; a integer; b integer; c integer; total integer; p1 integer; p2 integer; p3 integer;
-  guess text; reliability numeric;
+  guess text; reliability numeric; roll numeric; uncertainty numeric; unknown_chance numeric; second_key text;
 begin
   perform public.wwm_assert_participant(p_participant_id,p_token);
   typ:=lower(btrim(coalesce(p_joker_type,'')));
@@ -552,9 +552,21 @@ begin
     p1:=round(rem::numeric*a/total)::integer; p2:=round(rem::numeric*b/total)::integer; p3:=rem-p1-p2;
     result:=jsonb_build_object('type','audience','percentages',jsonb_build_object(ckey,cp,wrong_keys[1],p1,wrong_keys[2],p2,wrong_keys[3],p3));
   elsif typ='phone' then
-    reliability:=greatest(.52,.88-(p.current_question_index*.022));
-    if random()<=reliability then guess:=ckey; else guess:=wrong_keys[1+floor(random()*3)::integer]; end if;
-    result:=jsonb_build_object('type','phone','guessKey',guess,'confidence',55+floor(random()*36)::integer);
+    uncertainty:=least(.70,.18+(p.current_question_index*.035));
+    unknown_chance:=least(.30,.03+(p.current_question_index*.018));
+    roll:=random();
+    if roll < (1-uncertainty) then
+      result:=jsonb_build_object('type','phone','outcome','certain','guessKey',ckey);
+    elsif roll < (1-unknown_chance) then
+      second_key:=wrong_keys[1+floor(random()*3)::integer];
+      if random()<.5 then
+        result:=jsonb_build_object('type','phone','outcome','between','keys',jsonb_build_array(ckey,second_key));
+      else
+        result:=jsonb_build_object('type','phone','outcome','between','keys',jsonb_build_array(second_key,ckey));
+      end if;
+    else
+      result:=jsonb_build_object('type','phone','outcome','unknown');
+    end if;
   else
     result:=jsonb_build_object('type','teacher','message','Bitte die Lehrperson um einen Hinweis.');
   end if;

@@ -827,7 +827,7 @@ async function revealAnswer(serverResult = null) {
 
   let cue = 'correct-low';
   if (state.play.index === 4) cue = 'safe1';
-  else if (state.play.index === 9) cue = 'safe2';
+  else if (state.play.index === 9) cue = 'safe1';
   else if (state.play.index >= 10 && state.play.index < 14) cue = 'correct-high';
   else if (state.play.index >= 14) cue = 'correct-million';
 
@@ -986,12 +986,34 @@ function audienceBars(percentages) {
   }).join('');
 }
 
+function phoneOutcomeProbabilities(index) {
+  const uncertainty = Math.min(.70, .18 + index * .035);
+  const unknown = Math.min(.30, .03 + index * .018);
+  return {
+    certain: 1 - uncertainty,
+    between: uncertainty - unknown,
+    unknown
+  };
+}
+
 function localPhoneResult() {
   const correct = state.play.answers.find(answer => answer.correct);
-  const wrong = state.play.answers.filter(answer => !answer.correct);
-  const reliability = Math.max(.52, .88 - state.play.index * .022);
-  const guess = Math.random() < reliability ? correct : wrong[Math.floor(Math.random() * wrong.length)];
-  return { type:'phone', guessKey: guess.key, confidence: 55 + Math.floor(Math.random() * 36) };
+  const activeAnswers = state.play.answers.filter(answer => !document.querySelector(`.answer[data-key="${answer.key}"]`)?.classList.contains('removed'));
+  const wrong = activeAnswers.filter(answer => !answer.correct);
+  const probabilities = phoneOutcomeProbabilities(state.play.index);
+  const roll = Math.random();
+
+  if (roll < probabilities.certain || !wrong.length) {
+    return { type:'phone', outcome:'certain', guessKey: correct.key };
+  }
+
+  if (roll < probabilities.certain + probabilities.between) {
+    const other = wrong[Math.floor(Math.random() * wrong.length)].key;
+    const keys = Math.random() < .5 ? [correct.key, other] : [other, correct.key];
+    return { type:'phone', outcome:'between', keys };
+  }
+
+  return { type:'phone', outcome:'unknown' };
 }
 
 async function usePhone(seq) {
@@ -1020,11 +1042,20 @@ async function usePhone(seq) {
   if (packet.error) throw packet.error;
   const result = packet.result;
 
+  let phoneText;
+  if (result.outcome === 'between' && Array.isArray(result.keys) && result.keys.length >= 2) {
+    phoneText = `«Ich schwanke zwischen <strong>${escapeHtml(String(result.keys[0]).toUpperCase())}</strong> und <strong>${escapeHtml(String(result.keys[1]).toUpperCase())}</strong>. Mehr kann ich leider nicht eingrenzen.»`;
+  } else if (result.outcome === 'unknown') {
+    phoneText = '«Tut mir leid, ich weiss es wirklich nicht. Ich möchte dich hier nicht in die falsche Richtung schicken.»';
+  } else {
+    phoneText = `«Ich bin mir sicher: Die richtige Antwort ist <strong>${escapeHtml(String(result.guessKey || '').toUpperCase())}</strong>.»`;
+  }
+
   modal(`
     <div class="joker-result-pop">
       <div class="phase-icon">☎</div>
       <h3>Der Tipp</h3>
-      <div class="phone-process final-phone-tip">«Ich würde <strong>${escapeHtml(String(result.guessKey || '').toUpperCase())}</strong> nehmen. Ich bin ungefähr zu <strong>${Number(result.confidence || 0)}%</strong> sicher.»</div>
+      <div class="phone-process final-phone-tip">${phoneText}</div>
       <div class="modal-actions"><button class="btn primary" data-modal="close-joker">Zurück zur Frage</button></div>
     </div>`, true);
 }
