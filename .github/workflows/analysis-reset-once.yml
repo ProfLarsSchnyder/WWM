@@ -1,0 +1,30 @@
+name: Analysis reset once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/analysis-reset-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply analysis reset update
+        run: python .github/scripts/analysis_reset_patch.py
+      - name: Check JavaScript
+        run: |
+          node --check js/app-v3.js
+          node --check js/backend-v3.js
+      - name: Commit changes
+        run: |
+          git config user.name "ProfLarsSchnyder"
+          git config user.email "lars.schnyder1@gmail.com"
+          git add js/app-v3.js js/backend-v3.js index.html
+          git commit -m "Add live analysis reset"
+          git push
