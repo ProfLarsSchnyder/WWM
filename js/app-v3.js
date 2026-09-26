@@ -7,7 +7,7 @@ import {
 import {
   isBackendConfigured, teacherToken, teacherLogin, teacherLogout,
   teacherGamesList, teacherGameSave, teacherGameDelete,
-  teacherStopHost, teacherDashboard, teacherSessionHistory,
+  teacherStopHost, teacherDashboardGame, teacherSessionHistory,
   studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
   friendlyBackendError
@@ -25,6 +25,7 @@ const state = {
   editorQuestions: [],
   importMode: 'simple',
   dashboardTimer: null,
+  dashboardGameId: null,
   heartbeatTimer: null,
   playSeq: 0,
   play: null,
@@ -96,6 +97,7 @@ async function handleAction(action, button) {
   if (action === 'teacher-refresh' || action === 'teacher-show-games') return openTeacherHome();
   if (action === 'teacher-new-game') return openEditor();
   if (action === 'teacher-open-dashboard') return openDashboard();
+  if (action === 'analysis-picker') return openDashboard();
   if (action === 'teacher-history') return openHistory();
   if (action === 'editor-cancel') return openTeacherHome();
   if (action === 'editor-save') return saveEditor();
@@ -120,6 +122,10 @@ async function handleAction(action, button) {
   if (action === 'game-code') {
     const game = gameById(button.dataset.id);
     if (game) showGameCode(game);
+  }
+  if (action === 'analysis-game') {
+    const game = gameById(button.dataset.id);
+    if (game) await openGameDashboard(game);
   }
   if (action === 'game-edit') {
     const game = gameById(button.dataset.id);
@@ -421,15 +427,28 @@ function showHostCode() {
 }
 
 async function openDashboard() {
-  const dashboard = await teacherDashboard();
-  if (!dashboard?.active) {
-    modal(`
-      <p class="eyebrow">Live Analyse</p>
-      <h3>Noch keine Lernenden aktiv</h3>
-      <p>Sobald jemand eines der Spiele über seinen dauerhaften Code startet, erscheint die Aktivität hier.</p>
-      <div class="modal-actions"><button class="btn primary" data-modal="close">OK</button></div>`);
-    return;
-  }
+  stopDashboardPolling();
+  if (!state.teacherGames.length) state.teacherGames = await teacherGamesList();
+
+  const rows = state.teacherGames.map(game => `
+    <div class="history-row">
+      <div><strong>${escapeHtml(game.title || 'Spiel')}</strong><br><small>Code ${escapeHtml(game.joinCode || '------')}</small></div>
+      <span>${Array.isArray(game.questions) ? game.questions.length : 0} Fragen</span>
+      <button class="btn primary small" data-action="analysis-game" data-id="${game.id}">Analyse öffnen</button>
+    </div>`).join('');
+
+  modal(`
+    <p class="eyebrow">Live Analyse</p>
+    <h3>Spiel auswählen</h3>
+    <p class="section-muted">Wähle das Spiel, dessen Lernstände und Ergebnisse du sehen möchtest.</p>
+    <div class="history-list">${rows || '<div class="empty-state"><p>Noch keine Spiele vorhanden.</p></div>'}</div>
+    <div class="modal-actions"><button class="btn" data-modal="close">Schliessen</button></div>`, false, true);
+}
+
+async function openGameDashboard(game) {
+  closeModal(true);
+  state.dashboardGameId = game.id;
+  const dashboard = await teacherDashboardGame(game.id);
   showScreen('host');
   renderDashboard(dashboard);
   startDashboardPolling();
@@ -448,12 +467,8 @@ function stopDashboardPolling() {
 }
 
 async function refreshDashboard() {
-  const data = await teacherDashboard();
-  if (!data?.active) {
-    stopDashboardPolling();
-    toast('Momentan ist noch keine Spielaktivität vorhanden.');
-    return openTeacherHome();
-  }
+  if (!state.dashboardGameId) return openDashboard();
+  const data = await teacherDashboardGame(state.dashboardGameId);
   renderDashboard(data);
 }
 
