@@ -82,6 +82,7 @@ export const teacherHostGame = gameId => teacherRpc('wwm_teacher_host_game', { p
 export const teacherStopHost = () => teacherRpc('wwm_teacher_stop_host');
 export const teacherDashboard = () => teacherRpc('wwm_teacher_dashboard');
 export const teacherDashboardGame = gameId => teacherRpc('wwm_teacher_dashboard_game', { p_game_id: gameId });
+export const teacherResetAnalysis = gameId => teacherRpc('wwm_teacher_reset_analysis', { p_game_id: gameId });
 export const teacherSessionHistory = () => teacherRpc('wwm_teacher_session_history');
 
 export function studentSession() {

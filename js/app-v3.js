@@ -7,7 +7,7 @@ import {
 import {
   isBackendConfigured, teacherToken, teacherLogin, teacherLogout,
   teacherGamesList, teacherGameSave, teacherGameDelete,
-  teacherStopHost, teacherDashboardGame, teacherSessionHistory,
+  teacherStopHost, teacherDashboardGame, teacherResetAnalysis, teacherSessionHistory,
   studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
   friendlyBackendError
@@ -105,6 +105,7 @@ async function handleAction(action, button) {
   if (action === 'editor-import') return importEditorQuestions();
   if (action === 'editor-add-question') return addEditorQuestion();
   if (action === 'host-refresh') return refreshDashboard();
+  if (action === 'analysis-reset') return resetCurrentAnalysis();
   if (action === 'host-code-big') return showHostCode();
   if (action === 'host-stop') return stopHosting();
   if (action === 'host-back') return openTeacherHome();
@@ -470,6 +471,16 @@ async function refreshDashboard() {
   if (!state.dashboardGameId) return openDashboard();
   const data = await teacherDashboardGame(state.dashboardGameId);
   renderDashboard(data);
+}
+
+async function resetCurrentAnalysis() {
+  if (!state.dashboardGameId) return;
+  const game = gameById(state.dashboardGameId);
+  const title = game?.title || 'dieses Spiel';
+  if (!confirm(`Live Analyse für «${title}» zurücksetzen? Die bisherige Auswertung bleibt im Verlauf erhalten, die Live Analyse startet leer.`)) return;
+  await teacherResetAnalysis(state.dashboardGameId);
+  toast('Live Analyse zurückgesetzt.');
+  await refreshDashboard();
 }
 
 function renderDashboard(data) {
