@@ -11,7 +11,7 @@ import {
   studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
   friendlyBackendError
-} from './backend-v3.js';
+} from './backend-v3.js?v=20260926-analysis2';
 
 const money = ["50 €","100 €","200 €","300 €","500 €","1'000 €","2'000 €","4'000 €","8'000 €","16'000 €","32'000 €","64'000 €","125'000 €","500'000 €","1'000'000 €"];
 const $ = selector => document.querySelector(selector);
