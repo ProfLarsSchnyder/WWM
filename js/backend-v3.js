@@ -107,12 +107,22 @@ export async function studentPreview(joinCode) {
   return rpc('wwm_student_preview', { p_join_code: String(joinCode || '').trim() });
 }
 
-export async function studentJoin(joinCode, name, className) {
-  const result = await rpc('wwm_student_join', {
-    p_join_code: String(joinCode || '').trim(),
-    p_student_name: String(name || '').trim(),
-    p_class_name: String(className || '').trim()
-  });
+export async function studentJoin(gameOrCode, name, className) {
+  const identifier = String(gameOrCode || '').trim();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
+
+  const result = isUuid
+    ? await rpc('wwm_student_join_game', {
+        p_game_id: identifier,
+        p_student_name: String(name || '').trim(),
+        p_class_name: String(className || '').trim()
+      })
+    : await rpc('wwm_student_join', {
+        p_join_code: identifier,
+        p_student_name: String(name || '').trim(),
+        p_class_name: String(className || '').trim()
+      });
+
   const session = {
     participantId: result.participantId,
     participantToken: result.participantToken,
@@ -183,6 +193,7 @@ export function friendlyBackendError(error, { student = false } = {}) {
   if (/falsches passwort/i.test(message)) return 'Passwort ist nicht korrekt.';
   if (/lehrer sitzung|teacher_login_required/i.test(message)) return 'Lehrersitzung ist abgelaufen. Bitte erneut anmelden.';
   if (/code ist nicht gültig/i.test(message)) return 'Der Spielcode ist nicht korrekt.';
+  if (/spiel ist nicht freigeschaltet/i.test(message)) return 'Dieses Spiel ist momentan nicht freigeschaltet.';
   if (/kein spiel geöffnet/i.test(message)) return 'Momentan ist kein Spiel für Lernende geöffnet.';
   if (/spieler sitzung|student_session_required/i.test(message)) return 'Deine Spielsitzung ist nicht mehr verfügbar.';
   return message;
