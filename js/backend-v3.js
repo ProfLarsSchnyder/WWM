@@ -89,15 +89,6 @@ export const teacherDashboardGame = gameId => teacherRpc('wwm_teacher_dashboard_
 export const teacherResetAnalysis = gameId => teacherRpc('wwm_teacher_reset_analysis', { p_game_id: gameId });
 export const teacherSessionHistory = () => teacherRpc('wwm_teacher_session_history');
 
-// Zugriffssystem v4: Kategorie und Sichtbarkeit werden getrennt verwaltet.
-export const teacherSetGameAccess = (gameId, category, accessMode) => teacherRpc('wwm_teacher_game_access_set', {
-  p_game_id: gameId,
-  p_category: category,
-  p_access_mode: accessMode
-});
-
-export const studentGamesList = () => rpc('wwm_student_games_list');
-
 export function studentSession() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STUDENT_SESSION_KEY) || 'null');
@@ -116,24 +107,12 @@ export async function studentPreview(joinCode) {
   return rpc('wwm_student_preview', { p_join_code: String(joinCode || '').trim() });
 }
 
-export async function studentJoin(gameOrCode, name, className) {
-  const identifier = String(gameOrCode || '').trim();
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
-
-  // Neue Oberfläche: direkt über die freigeschaltete Spiel-ID beitreten.
-  // Fallback: alte Codes funktionieren weiter, bis die Supabase-Migration ausgeführt wurde.
-  const result = isUuid
-    ? await rpc('wwm_student_join_game', {
-        p_game_id: identifier,
-        p_student_name: String(name || '').trim(),
-        p_class_name: String(className || '').trim()
-      })
-    : await rpc('wwm_student_join', {
-        p_join_code: identifier,
-        p_student_name: String(name || '').trim(),
-        p_class_name: String(className || '').trim()
-      });
-
+export async function studentJoin(joinCode, name, className) {
+  const result = await rpc('wwm_student_join', {
+    p_join_code: String(joinCode || '').trim(),
+    p_student_name: String(name || '').trim(),
+    p_class_name: String(className || '').trim()
+  });
   const session = {
     participantId: result.participantId,
     participantToken: result.participantToken,
@@ -204,23 +183,7 @@ export function friendlyBackendError(error, { student = false } = {}) {
   if (/falsches passwort/i.test(message)) return 'Passwort ist nicht korrekt.';
   if (/lehrer sitzung|teacher_login_required/i.test(message)) return 'Lehrersitzung ist abgelaufen. Bitte erneut anmelden.';
   if (/code ist nicht gültig/i.test(message)) return 'Der Spielcode ist nicht korrekt.';
-  if (/spiel ist nicht freigeschaltet|spiel nicht freigeschaltet/i.test(message)) return 'Dieses Spiel ist momentan nicht freigeschaltet.';
   if (/kein spiel geöffnet/i.test(message)) return 'Momentan ist kein Spiel für Lernende geöffnet.';
   if (/spieler sitzung|student_session_required/i.test(message)) return 'Deine Spielsitzung ist nicht mehr verfügbar.';
   return message;
-}
-
-// Das Zusatzmodul verändert nur die Auswahl- und Verwaltungsoberfläche.
-// Falls die neue Supabase-Migration noch nicht installiert ist, fällt es sauber
-// auf die bisherige Code-Oberfläche zurück.
-if (typeof window !== 'undefined') {
-  window.__WWM_ACCESS_API = {
-    studentGamesList,
-    teacherGamesList,
-    teacherSetGameAccess,
-    teacherToken
-  };
-  queueMicrotask(() => {
-    import('./access-v4.js?v=20260927-access1').catch(error => console.warn('WWM access v4:', error));
-  });
 }
