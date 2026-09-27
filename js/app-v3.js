@@ -6,12 +6,13 @@ import {
 } from './audio.js';
 import {
   isBackendConfigured, teacherToken, teacherLogin, teacherLogout,
-  teacherGamesList, teacherGameSave, teacherGameDelete,
+  teacherGamesList, teacherGameSave, teacherGameDelete, teacherGameMove,
+  teacherFoldersList, teacherFolderCreate, teacherFolderDelete,
   teacherStopHost, teacherDashboardGame, teacherResetAnalysis, teacherSessionHistory,
   studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
   friendlyBackendError
-} from './backend-v3.js?v=20260926-analysis2';
+} from './backend-v3.js?v=20260927-folderexplorer1';
 
 const money = ["50 €","100 €","200 €","300 €","500 €","1'000 €","2'000 €","4'000 €","8'000 €","16'000 €","32'000 €","64'000 €","125'000 €","500'000 €","1'000'000 €"];
 const $ = selector => document.querySelector(selector);
@@ -20,6 +21,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const state = {
   teacherGames: [],
+  teacherFolders: [],
+  currentFolder: null,
   editorId: null,
   editorCreatedAt: null,
   editorQuestions: [],
@@ -96,6 +99,8 @@ async function handleAction(action, button) {
   if (action === 'teacher-logout') return logoutTeacher();
   if (action === 'teacher-refresh' || action === 'teacher-show-games') return openTeacherHome();
   if (action === 'teacher-new-game') return openEditor();
+  if (action === 'teacher-new-folder') return createFolder();
+  if (action === 'folder-up') return openFolder(null);
   if (action === 'teacher-open-dashboard') return openDashboard();
   if (action === 'analysis-picker') return openDashboard();
   if (action === 'teacher-history') return openHistory();
@@ -123,6 +128,16 @@ async function handleAction(action, button) {
   if (action === 'game-code') {
     const game = gameById(button.dataset.id);
     if (game) showGameCode(game);
+  }
+  if (action === 'folder-open') return openFolder(button.dataset.folder || '');
+  if (action === 'folder-delete') return deleteFolder(button.dataset.folderId || '', button.dataset.folder || '');
+  if (action === 'game-move') {
+    const game = gameById(button.dataset.id);
+    if (game) showMoveGame(game);
+  }
+  if (action === 'move-game-folder') {
+    const game = gameById(button.dataset.id);
+    if (game) await moveGame(game, button.dataset.folder || '');
   }
   if (action === 'analysis-game') {
     const game = gameById(button.dataset.id);
@@ -208,10 +223,11 @@ async function logoutTeacher() {
 
 async function openTeacherHome() {
   if (!teacherToken()) return openTeacherLogin();
-  state.teacherGames = await teacherGamesList();
+  const [games, folders] = await Promise.all([teacherGamesList(), teacherFoldersList()]);
+  state.teacherGames = games || [];
+  state.teacherFolders = folders || [];
+  state.currentFolder = null;
   renderTeacherGames();
-  $('#teacher-section-title').textContent = 'Meine Spiele';
-  $('#teacher-section-subtitle').textContent = `${state.teacherGames.length} gespeicherte Spiele`;
   showScreen('teacher');
 }
 
@@ -222,42 +238,79 @@ function gameById(id) {
 function renderTeacherGames() {
   const box = $('#teacher-games');
   box.replaceChildren();
-  $('#teacher-empty').classList.toggle('hidden', state.teacherGames.length > 0);
-  if (!state.teacherGames.length) return;
+  const current = state.currentFolder;
 
-  const grouped = new Map();
-  for (const game of state.teacherGames) {
-    const folder = String(game.folder || '').trim();
-    if (!grouped.has(folder)) grouped.set(folder, []);
-    grouped.get(folder).push(game);
+  const folderNames = [...new Set([
+    ...state.teacherFolders.map(folder => String(folder.name || '').trim()),
+    ...state.teacherGames.map(game => String(game.folder || '').trim())
+  ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de-CH', { sensitivity: 'base' }));
+
+  if (current == null) {
+    $('#teacher-section-title').textContent = 'Meine Spiele';
+    $('#teacher-section-subtitle').textContent = `${state.teacherGames.length} gespeicherte Spiele · ${folderNames.length} Ordner`;
+    $('#teacher-empty').classList.toggle('hidden', state.teacherGames.length > 0 || folderNames.length > 0);
+
+    if (folderNames.length) {
+      const folderGrid = document.createElement('div');
+      folderGrid.className = 'folder-grid-v3';
+      for (const name of folderNames) {
+        const folderRecord = state.teacherFolders.find(folder => folder.name === name);
+        const count = state.teacherGames.filter(game => String(game.folder || '').trim() === name).length;
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'folder-card-v3';
+        card.dataset.action = 'folder-open';
+        card.dataset.folder = name;
+        card.innerHTML = `<span class="folder-icon-v3">📁</span><strong></strong><small>${count} ${count === 1 ? 'Spiel' : 'Spiele'}</small>`;
+        card.querySelector('strong').textContent = name;
+        if (folderRecord?.id) card.dataset.folderId = folderRecord.id;
+        folderGrid.append(card);
+      }
+      box.append(folderGrid);
+    }
+
+    const rootGames = state.teacherGames.filter(game => !String(game.folder || '').trim());
+    if (rootGames.length) {
+      const heading = document.createElement('div');
+      heading.className = 'explorer-heading-v3';
+      heading.innerHTML = '<strong>Spiele ohne Ordner</strong><span></span>';
+      heading.querySelector('span').textContent = `${rootGames.length} ${rootGames.length === 1 ? 'Spiel' : 'Spiele'}`;
+      box.append(heading);
+      const grid = document.createElement('div');
+      grid.className = 'game-grid-v3';
+      for (const game of rootGames) grid.append(renderTeacherGameCard(game));
+      box.append(grid);
+    }
+    return;
   }
 
-  const folders = [...grouped.keys()].sort((a, b) => {
-    if (!a && b) return 1;
-    if (a && !b) return -1;
-    return a.localeCompare(b, 'de-CH', { sensitivity: 'base' });
-  });
+  const folderRecord = state.teacherFolders.find(folder => folder.name === current);
+  const games = state.teacherGames.filter(game => String(game.folder || '').trim() === current);
+  $('#teacher-section-title').textContent = `📁 ${current}`;
+  $('#teacher-section-subtitle').textContent = `${games.length} ${games.length === 1 ? 'Spiel' : 'Spiele'} in diesem Ordner`;
+  $('#teacher-empty').classList.add('hidden');
 
-  for (const folder of folders) {
-    const section = document.createElement('section');
-    section.className = 'folder-section-v3';
+  const toolbar = document.createElement('div');
+  toolbar.className = 'folder-toolbar-v3';
+  toolbar.innerHTML = `
+    <button class="btn" data-action="folder-up">← Meine Spiele</button>
+    <div class="folder-path-v3"><span>Meine Spiele</span><b>›</b><strong></strong></div>
+    ${folderRecord?.id ? `<button class="btn danger-btn" data-action="folder-delete" data-folder-id="${folderRecord.id}" data-folder="${escapeHtml(current)}">Ordner löschen</button>` : ''}`;
+  toolbar.querySelector('.folder-path-v3 strong').textContent = current;
+  box.append(toolbar);
 
-    const head = document.createElement('div');
-    head.className = 'folder-head-v3';
-    const title = document.createElement('h3');
-    title.textContent = folder ? `📁 ${folder}` : '🗂️ Ohne Ordner';
-    const count = document.createElement('span');
-    const games = grouped.get(folder) || [];
-    count.textContent = `${games.length} ${games.length === 1 ? 'Spiel' : 'Spiele'}`;
-    head.append(title, count);
-
-    const grid = document.createElement('div');
-    grid.className = 'game-grid-v3';
-    for (const game of games) grid.append(renderTeacherGameCard(game));
-
-    section.append(head, grid);
-    box.append(section);
+  if (!games.length) {
+    const empty = document.createElement('div');
+    empty.className = 'folder-empty-v3';
+    empty.innerHTML = '<div>📂</div><strong>Dieser Ordner ist leer</strong><p>Verschiebe ein bestehendes Spiel hierher oder erstelle ein neues Spiel in diesem Ordner.</p>';
+    box.append(empty);
+    return;
   }
+
+  const grid = document.createElement('div');
+  grid.className = 'game-grid-v3';
+  for (const game of games) grid.append(renderTeacherGameCard(game));
+  box.append(grid);
 }
 
 function renderTeacherGameCard(game) {
@@ -270,12 +323,68 @@ function renderTeacherGameCard(game) {
     <div class="game-card-actions">
       <button class="btn primary" data-action="game-beamer" data-id="${game.id}">Beamer</button>
       <button class="btn" data-action="game-code" data-id="${game.id}">Code anzeigen</button>
+      <button class="btn" data-action="game-move" data-id="${game.id}">📁 Verschieben</button>
       <button class="btn" data-action="game-edit" data-id="${game.id}">Bearbeiten</button>
       <button class="btn" data-action="game-duplicate" data-id="${game.id}">Duplizieren</button>
       <button class="btn danger-btn" data-action="game-delete" data-id="${game.id}">Löschen</button>
     </div>`;
   card.querySelector('h3').textContent = game.title;
   return card;
+}
+
+async function createFolder() {
+  const proposed = prompt('Name des neuen Ordners:');
+  if (proposed == null) return;
+  const name = proposed.trim();
+  if (!name) return;
+  const folder = await teacherFolderCreate(name);
+  state.teacherFolders = await teacherFoldersList();
+  state.currentFolder = folder?.name || name;
+  renderTeacherGames();
+  toast(`Ordner «${state.currentFolder}» erstellt.`);
+}
+
+function openFolder(name) {
+  state.currentFolder = name ? String(name) : null;
+  renderTeacherGames();
+}
+
+async function deleteFolder(folderId, name) {
+  if (!folderId) return;
+  const count = state.teacherGames.filter(game => String(game.folder || '').trim() === name).length;
+  const extra = count ? ` Die ${count} ${count === 1 ? 'Spiel' : 'Spiele'} werden zu «Ohne Ordner» verschoben.` : '';
+  if (!confirm(`Ordner «${name}» wirklich löschen?${extra}`)) return;
+  await teacherFolderDelete(folderId);
+  const [games, folders] = await Promise.all([teacherGamesList(), teacherFoldersList()]);
+  state.teacherGames = games || [];
+  state.teacherFolders = folders || [];
+  state.currentFolder = null;
+  renderTeacherGames();
+  toast('Ordner gelöscht. Spiele bleiben erhalten.');
+}
+
+function showMoveGame(game) {
+  const folders = [...new Set(state.teacherFolders.map(folder => String(folder.name || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'de-CH', { sensitivity: 'base' }));
+  const current = String(game.folder || '').trim();
+  const choices = [
+    `<button class="folder-choice-v3${!current ? ' active' : ''}" data-action="move-game-folder" data-id="${game.id}" data-folder=""><span>🗂️</span><strong>Ohne Ordner</strong>${!current ? '<small>Aktuell</small>' : ''}</button>`,
+    ...folders.map(name => `<button class="folder-choice-v3${current === name ? ' active' : ''}" data-action="move-game-folder" data-id="${game.id}" data-folder="${escapeHtml(name)}"><span>📁</span><strong>${escapeHtml(name)}</strong>${current === name ? '<small>Aktuell</small>' : ''}</button>`)
+  ].join('');
+  modal(`
+    <p class="eyebrow">Spiel verschieben</p>
+    <h3>${escapeHtml(game.title)}</h3>
+    <p class="section-muted">Wähle den Zielordner.</p>
+    <div class="folder-choice-grid-v3">${choices}</div>
+    <div class="modal-actions"><button class="btn" data-modal="close">Abbrechen</button></div>`, false, true);
+}
+
+async function moveGame(game, folder) {
+  await teacherGameMove(game.id, folder || null);
+  state.teacherGames = await teacherGamesList();
+  closeModal(true);
+  renderTeacherGames();
+  toast(folder ? `Spiel nach «${folder}» verschoben.` : 'Spiel zu «Ohne Ordner» verschoben.');
 }
 
 function formatDate(value) {
@@ -314,10 +423,13 @@ function openEditor(game = null) {
   state.importMode = 'simple';
   $('#editor-v3-title').textContent = game ? 'Spiel bearbeiten' : 'Neues Spiel';
   $('#editor-game-title').value = game?.title || '';
-  $('#editor-game-folder').value = game?.folder || '';
+  $('#editor-game-folder').value = game?.folder || state.currentFolder || '';
   const folderSuggestions = $('#editor-folder-suggestions');
   folderSuggestions.replaceChildren();
-  [...new Set(state.teacherGames.map(item => String(item.folder || '').trim()).filter(Boolean))]
+  [...new Set([
+    ...state.teacherFolders.map(item => String(item.name || '').trim()),
+    ...state.teacherGames.map(item => String(item.folder || '').trim())
+  ].filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'de-CH', { sensitivity: 'base' }))
     .forEach(folder => {
       const option = document.createElement('option');
