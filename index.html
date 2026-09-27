@@ -7,7 +7,7 @@
   <title>Wer wird Millionär? Unterrichtsquiz</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="styles-v2.css">
-  <link rel="stylesheet" href="styles-v3.css?v=20260926-phone3">
+  <link rel="stylesheet" href="styles-v3.css?v=20260927-folders1">
 </head>
 <body>
   <div class="ambient" aria-hidden="true"></div>
@@ -83,7 +83,7 @@
             </div>
             <button class="btn primary" data-action="teacher-new-game">Neues Spiel</button>
           </div>
-          <div id="teacher-games" class="game-grid-v3"></div>
+          <div id="teacher-games" class="folder-list-v3"></div>
           <div id="teacher-empty" class="empty-state hidden">
             <h3>Noch keine Spiele</h3>
             <p>Erstelle deinen ersten Fragensatz.</p>
@@ -109,6 +109,11 @@
           <section class="editor-v3-panel">
             <label class="field-label" for="editor-game-title">Titel des Spiels</label>
             <input id="editor-game-title" class="text-input" type="text" placeholder="z. B. Angebot und Nachfrage">
+
+            <label class="field-label folder-field-label" for="editor-game-folder">Ordner <span class="section-muted">optional</span></label>
+            <input id="editor-game-folder" class="text-input" type="text" maxlength="80" list="editor-folder-suggestions" placeholder="z. B. VWL, Recht oder Prüfungen">
+            <datalist id="editor-folder-suggestions"></datalist>
+            <p class="folder-field-hint">Bestehenden Ordner auswählen oder einen neuen Namen eingeben. Ohne Eintrag bleibt das Spiel unter «Ohne Ordner».</p>
 
             <div class="import-tabs-v3">
               <button class="btn small active" data-import-v3="simple">Einfach</button>
@@ -306,6 +311,6 @@
     <div id="modal-content" class="modal-card"></div>
   </div>
 
-  <script type="module" src="js/app-v3.js?v=20260926-analysis3"></script>
+  <script type="module" src="js/app-v3.js?v=20260927-phonefolders1"></script>
 </body>
 </html>

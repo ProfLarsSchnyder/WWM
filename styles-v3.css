@@ -124,3 +124,13 @@ body{background:
   line-height:1.4;
 }
 .phone-process.final-phone-tip strong{display:inline;color:var(--v3-orange)}
+
+
+/* Teacher folders */
+.folder-list-v3{display:grid;gap:22px}
+.folder-section-v3{display:grid;gap:11px}
+.folder-head-v3{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 3px}
+.folder-head-v3 h3{margin:0;font-size:18px;color:#eef1ff}
+.folder-head-v3 span{font-size:12px;color:var(--v3-muted);font-weight:800}
+.folder-field-label{margin-top:14px;display:block}
+.folder-field-hint{margin:7px 0 0;color:var(--v3-muted);font-size:12px;line-height:1.4}
