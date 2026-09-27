@@ -1,4 +1,4 @@
-import { rpc, teacherToken } from './backend-v3.js?v=20260927-recovery1';
+import { rpc, teacherToken } from './backend-v3.js?v=20260927-access5';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -216,13 +216,13 @@ function startVisibleGame(game) {
     className?.focus();
     return;
   }
-  if (!game.joinCode) {
+  if (!game.id) {
     if (error) error.textContent = 'Dieses Spiel kann gerade nicht gestartet werden. Bitte Seite neu laden.';
     return;
   }
 
   if (error) error.textContent = '';
-  code.value = String(game.joinCode).trim().toUpperCase();
+  code.value = String(game.id).trim();
   $('#student-login-form')?.requestSubmit();
 }
 
