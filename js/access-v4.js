@@ -22,9 +22,9 @@ if (api) {
     style.id = 'wwm-access-v4-styles';
     style.textContent = `
       .wwm-code-ui-hidden { display:none !important; }
-      .host-code-card { display:none !important; }
-      .host-layout { grid-template-columns:minmax(0,1fr) !important; }
-      [data-action="game-code"], [data-action="host-code-big"] { display:none !important; }
+      .wwm-access-ready .host-code-card { display:none !important; }
+      .wwm-access-ready .host-layout { grid-template-columns:minmax(0,1fr) !important; }
+      .wwm-access-ready [data-action="game-code"], .wwm-access-ready [data-action="host-code-big"] { display:none !important; }
 
       .student-game-browser-v4 { margin-top:22px; display:grid; gap:22px; }
       .student-game-section-v4 { display:grid; gap:12px; }
@@ -140,11 +140,11 @@ if (api) {
       const games = await api.studentGamesList();
       state.studentGames = Array.isArray(games) ? games : [];
       state.accessReady = true;
+      document.body.classList.add('wwm-access-ready');
       convertStudentScreen();
       renderStudentGames(browser, state.studentGames);
       cleanCodeReferences();
     } catch (error) {
-      // Migration noch nicht installiert: alte Code-Oberfläche bleibt vollständig nutzbar.
       state.accessReady = false;
       browser.remove();
       const codeInput = document.getElementById('student-code');
@@ -252,6 +252,7 @@ if (api) {
       if (!Array.isArray(games) || !games.some(game => 'accessMode' in game || 'category' in game)) return;
       state.teacherGames = games;
       state.accessReady = true;
+      document.body.classList.add('wwm-access-ready');
       const byId = new Map(games.map(game => [String(game.id), game]));
 
       document.querySelectorAll('.game-card-v3').forEach(card => {
