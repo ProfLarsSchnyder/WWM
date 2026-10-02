@@ -4,13 +4,14 @@ const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 
 let accessReady = false;
+let accessInitialising = null;
 let teacherGames = new Map();
 let teacherLoading = false;
 let lastTeacherLoad = 0;
 
 installStyles();
 installListeners();
-void initialiseAccess();
+void ensureAccessReady();
 
 async function initialiseAccess() {
   try {
@@ -18,19 +19,32 @@ async function initialiseAccess() {
     accessReady = true;
     document.body.classList.add('access-v4-ready');
     patchStaticCopy();
+    return true;
   } catch (error) {
     console.info('WWM Zugriffssystem v4 noch nicht aktiv. Alte Code-Oberfläche bleibt verfügbar.', error);
+    return false;
   }
+}
+
+function ensureAccessReady() {
+  if (accessReady) return Promise.resolve(true);
+  if (!accessInitialising) {
+    accessInitialising = initialiseAccess().finally(() => {
+      accessInitialising = null;
+    });
+  }
+  return accessInitialising;
 }
 
 function installListeners() {
   document.addEventListener('click', event => {
-    if (!accessReady) return;
-
     const action = event.target.closest('[data-action]')?.dataset.action || '';
+
     if (action === 'open-student-login') {
-      setTimeout(() => loadStudentBrowser(), 0);
+      setTimeout(() => void openStudentAccess(), 0);
     }
+
+    if (!accessReady) return;
 
     if (
       action === 'teacher-refresh' ||
@@ -63,10 +77,34 @@ function installListeners() {
   }, true);
 
   window.setInterval(() => {
-    if (!accessReady || !$('#screen-teacher')?.classList.contains('active')) return;
-    const undecorated = $$('.game-card-v3').some(card => !card.dataset.accessV4);
-    if (undecorated) void refreshTeacherAccess();
+    if (accessReady && $('#screen-teacher')?.classList.contains('active')) {
+      const undecorated = $('.game-card-v3').some(card => !card.dataset.accessV4);
+      if (undecorated) void refreshTeacherAccess();
+    }
   }, 900);
+
+  window.setInterval(() => {
+    if (accessReady && $('#screen-student-login')?.classList.contains('active')) {
+      void loadStudentBrowser();
+    }
+  }, 30000);
+
+  window.addEventListener('pageshow', () => {
+    if ($('#screen-student-login')?.classList.contains('active')) {
+      void openStudentAccess();
+    } else {
+      void ensureAccessReady();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if ($('#screen-student-login')?.classList.contains('active')) {
+      void openStudentAccess();
+    } else {
+      void ensureAccessReady();
+    }
+  });
 }
 
 function installStyles() {
@@ -123,8 +161,41 @@ function patchStaticCopy() {
   if (teacherGamesText) teacherGamesText.textContent = 'Spiele bearbeiten, ordnen und für Lernende freischalten.';
 }
 
+async function openStudentAccess() {
+  const form = $('#student-login-form');
+  if (!form) return;
+
+  const title = form.querySelector('h2');
+  const codeLabel = $('#student-code')?.closest('label');
+  const submit = form.querySelector('button[type="submit"]');
+
+  if (title) title.textContent = 'Spiel auswählen';
+  codeLabel?.classList.add('access-v4-hidden');
+  submit?.classList.add('access-v4-hidden');
+
+  let browser = $('#student-access-browser');
+  if (!browser) {
+    browser = document.createElement('div');
+    browser.id = 'student-access-browser';
+    browser.className = 'student-access-browser';
+    $('#student-login-error')?.before(browser);
+  }
+  browser.innerHTML = '<div class="student-access-loading">Freigeschaltete Spiele werden geladen …</div>';
+
+  const ready = await ensureAccessReady();
+  if (!ready) {
+    browser.remove();
+    codeLabel?.classList.remove('access-v4-hidden');
+    submit?.classList.remove('access-v4-hidden');
+    if (title) title.textContent = 'Spiel beitreten';
+    return;
+  }
+
+  await loadStudentBrowser();
+}
+
 async function loadStudentBrowser() {
-  if (!accessReady) return;
+  if (!accessReady && !(await ensureAccessReady())) return;
   const form = $('#student-login-form');
   if (!form) return;
 
