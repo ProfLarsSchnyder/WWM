@@ -657,10 +657,18 @@ async function openTrash() {
   const rows = (items || []).map(item => {
     const meta = [item.creatorName || 'Ohne Creator', item.folderName].filter(Boolean).join(' · ');
     const deleted = item.deletedAt ? new Date(item.deletedAt).toLocaleString('de-CH') : '';
+    const sameTitleActive = state.teacherGames.some(game =>
+      String(game.title || '').trim().toLocaleLowerCase('de-CH') ===
+      String(item.title || '').trim().toLocaleLowerCase('de-CH')
+    );
     return `
       <div class="trash-row-v4">
-        <div class="trash-main-v4"><strong>${escapeHtml(item.title || 'Spiel')}</strong><small>${escapeHtml(meta)} · ${Number(item.questionCount || 0)} Fragen${deleted ? ` · Papierkorb seit ${escapeHtml(deleted)}` : ''}</small></div>
-        <button class="btn primary" data-action="trash-restore" data-id="${item.id}">Wiederherstellen</button>
+        <div class="trash-main-v4">
+          <strong>${escapeHtml(item.title || 'Spiel')}</strong>
+          <small>${escapeHtml(meta)} · ${Number(item.questionCount || 0)} Fragen${deleted ? ` · Papierkorb seit ${escapeHtml(deleted)}` : ''}</small>
+          ${sameTitleActive ? '<span class="trash-warning-v4">Es gibt bereits ein aktives Spiel mit demselben Namen.</span>' : ''}
+        </div>
+        <button class="btn primary" data-action="trash-restore" data-id="${item.id}" data-title="${escapeHtml(item.title || 'Spiel')}">Wiederherstellen</button>
       </div>`;
   }).join('');
 
@@ -674,7 +682,31 @@ async function openTrash() {
 
 async function restoreTrashGame(gameId) {
   if (!gameId) return;
+
+  const trash = await teacherTrashList();
+  const item = (trash || []).find(entry => String(entry.id) === String(gameId));
+  const sameTitleActive = item && state.teacherGames.some(game =>
+    String(game.title || '').trim().toLocaleLowerCase('de-CH') ===
+    String(item.title || '').trim().toLocaleLowerCase('de-CH')
+  );
+
+  if (sameTitleActive) {
+    const ok = confirm(`Es gibt bereits ein aktives Spiel namens «${item.title}». Das Spiel im Papierkorb ist eine andere gespeicherte Version. Trotzdem zusätzlich wiederherstellen?`);
+    if (!ok) return;
+  }
+
   await teacherGameRestore(gameId);
+
+  const [games, folders, creators] = await Promise.all([
+    teacherGamesList(),
+    teacherFoldersList(),
+    teacherCreatorsList()
+  ]);
+  state.teacherGames = games || [];
+  state.teacherFolders = folders || [];
+  state.teacherCreators = creators || [];
+
+  renderTeacherGames();
   toast('Spiel wiederhergestellt.');
   await openTrash();
 }
