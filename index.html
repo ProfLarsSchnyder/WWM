@@ -8,13 +8,6 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="styles-v2.css">
   <link rel="stylesheet" href="styles-v3.css?v=20260927-folderexplorer1">
-  <script type="importmap">
-    {
-      "imports": {
-        "./js/backend-v3.js?v=20260927-folderexplorer1": "./js/backend-v3.js?v=20260927-access5"
-      }
-    }
-  </script>
 </head>
 <body>
   <div class="ambient" aria-hidden="true"></div>
@@ -77,7 +70,7 @@
 
         <div class="teacher-nav">
           <button class="nav-card" data-action="teacher-new-game"><strong>＋ Neues Spiel</strong><span>Fragen einfügen, automatisch erkennen und bearbeiten.</span></button>
-          <button class="nav-card" data-action="teacher-show-games"><strong>🎯 Meine Spiele</strong><span>Beamer, Spielcode, Bearbeiten, Duplizieren und Löschen.</span></button>
+          <button class="nav-card" data-action="teacher-show-games"><strong>🎯 Meine Spiele</strong><span>Creator, Ordner, Beamer, Bearbeiten, Duplizieren und Freigaben.</span></button>
           <button class="nav-card" data-action="teacher-open-dashboard"><strong>📊 Live Analyse</strong><span>Spielstände und Ergebnisse der Lernenden sehen.</span></button>
           <button class="nav-card" data-action="teacher-history"><strong>🕘 Verlauf</strong><span>Vergangene Spielaktivitäten ansehen.</span></button>
         </div>
@@ -88,7 +81,7 @@
               <h2 id="teacher-section-title">Meine Spiele</h2>
               <div id="teacher-section-subtitle" class="section-muted"></div>
             </div>
-            <div class="teacher-actions"><button class="btn" data-action="teacher-new-folder">📁 Neuer Ordner</button><button class="btn primary" data-action="teacher-new-game">Neues Spiel</button></div>
+            <div class="teacher-actions"><button class="btn" data-action="teacher-new-creator">＋ Creator</button><button class="btn" data-action="teacher-new-folder">📁 Neuer Ordner</button><button class="btn primary" data-action="teacher-new-game">Neues Spiel</button></div>
           </div>
           <div id="teacher-games" class="folder-list-v3"></div>
           <div id="teacher-empty" class="empty-state hidden">
@@ -117,10 +110,17 @@
             <label class="field-label" for="editor-game-title">Titel des Spiels</label>
             <input id="editor-game-title" class="text-input" type="text" placeholder="z. B. Angebot und Nachfrage">
 
-            <label class="field-label folder-field-label" for="editor-game-folder">Ordner <span class="section-muted">optional</span></label>
-            <input id="editor-game-folder" class="text-input" type="text" maxlength="80" list="editor-folder-suggestions" placeholder="z. B. VWL, Recht oder Prüfungen">
-            <datalist id="editor-folder-suggestions"></datalist>
-            <p class="folder-field-hint">Bestehenden Ordner auswählen oder einen neuen Namen eingeben. Ohne Eintrag bleibt das Spiel unter «Ohne Ordner».</p>
+            <label class="field-label folder-field-label" for="editor-game-creator">Creator <span class="section-muted">optional</span></label>
+            <input id="editor-game-creator" class="text-input" type="text" maxlength="80" list="editor-creator-suggestions" placeholder="Bestehenden Creator wählen oder neuen Namen eingeben">
+            <datalist id="editor-creator-suggestions"></datalist>
+            <div class="editor-creator-color-v4">
+              <label for="editor-creator-color">Creator Farbe</label>
+              <input id="editor-creator-color" type="color" value="#6f83ff">
+            </div>
+            <p class="folder-field-hint">Bei einem neuen Namen wird beim Speichern automatisch ein neuer Creator angelegt.</p>
+
+            <label class="field-label folder-field-label" for="editor-game-folder-select">Ordner <span class="section-muted">optional</span></label>
+            <select id="editor-game-folder-select" class="text-input"><option value="">Ohne Ordner</option></select>
 
             <div class="import-tabs-v3">
               <button class="btn small active" data-import-v3="simple">Einfach</button>
@@ -182,7 +182,7 @@
         </header>
 
         <div class="host-layout">
-          <aside class="host-code-card">
+          <aside class="host-code-card hidden">
             <div class="join-code-label">Spielcode</div>
             <div id="host-join-code" class="join-code">------</div>
             <div id="host-title" class="host-title"></div>
@@ -222,12 +222,12 @@
           <div class="student-fields">
             <label>Name<input id="student-name" class="text-input" maxlength="80" autocomplete="name" placeholder="Vorname und Nachname"></label>
             <label>Klasse<input id="student-class" class="text-input" maxlength="60" autocomplete="off" placeholder="z. B. BM26D"></label>
-            <label>Spielcode<input id="student-code" class="text-input code-input" maxlength="64" autocomplete="off" placeholder="CODE"></label>
+            <input id="student-code" type="hidden" value="">
           </div>
           <div id="student-login-error" class="form-error"></div>
           <div class="student-join-actions">
             <button class="btn ghost" type="button" data-action="back-to-mode">Zurück</button>
-            <button class="btn primary" type="submit">Beitreten</button>
+            <button class="btn primary hidden" type="submit" aria-hidden="true" tabindex="-1">Beitreten</button>
           </div>
         </form>
       </div>
@@ -318,6 +318,6 @@
     <div id="modal-content" class="modal-card"></div>
   </div>
 
-  <script type="module" src="js/app-v3.js?v=20261002-access6"></script>
+  <script type="module" src="js/app-v3.js?v=20261002-creators1"></script>
 </body>
 </html>

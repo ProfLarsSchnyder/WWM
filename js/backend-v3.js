@@ -82,6 +82,12 @@ export const teacherGameMove = (gameId, folder) => teacherRpc('wwm_teacher_game_
 export const teacherFoldersList = () => teacherRpc('wwm_teacher_folders_list');
 export const teacherFolderCreate = name => teacherRpc('wwm_teacher_folder_create', { p_name: name });
 export const teacherFolderDelete = folderId => teacherRpc('wwm_teacher_folder_delete', { p_folder_id: folderId });
+export const teacherCreatorsList = () => teacherRpc('wwm_teacher_creators_list');
+export const teacherCreatorEnsure = (name, color) => teacherRpc('wwm_teacher_creator_ensure', { p_name: name, p_color: color });
+export const teacherCreatorUpdate = (creatorId, name, color) => teacherRpc('wwm_teacher_creator_update', { p_creator_id: creatorId, p_name: name, p_color: color });
+export const teacherCreatorDelete = creatorId => teacherRpc('wwm_teacher_creator_delete', { p_creator_id: creatorId });
+export const teacherFolderSave = (folderId, name, creatorId) => teacherRpc('wwm_teacher_folder_save', { p_folder_id: folderId, p_name: name, p_creator_id: creatorId });
+export const teacherGameMoveStructure = (gameId, creatorId, folderId) => teacherRpc('wwm_teacher_game_move_structure', { p_game_id: gameId, p_creator_id: creatorId, p_folder_id: folderId });
 export const teacherHostGame = gameId => teacherRpc('wwm_teacher_host_game', { p_game_id: gameId });
 export const teacherStopHost = () => teacherRpc('wwm_teacher_stop_host');
 export const teacherDashboard = () => teacherRpc('wwm_teacher_dashboard');

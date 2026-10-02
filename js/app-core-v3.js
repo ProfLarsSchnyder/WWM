@@ -8,11 +8,13 @@ import {
   isBackendConfigured, teacherToken, teacherLogin, teacherLogout,
   teacherGamesList, teacherGameSave, teacherGameDelete, teacherGameMove,
   teacherFoldersList, teacherFolderCreate, teacherFolderDelete,
+  teacherCreatorsList, teacherCreatorEnsure, teacherCreatorUpdate, teacherCreatorDelete,
+  teacherFolderSave, teacherGameMoveStructure,
   teacherStopHost, teacherDashboardGame, teacherResetAnalysis, teacherSessionHistory,
   studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
   friendlyBackendError
-} from './backend-v3.js?v=20260927-folderexplorer1';
+} from './backend-v3.js?v=20261002-creators1';
 
 const money = ["50 €","100 €","200 €","300 €","500 €","1'000 €","2'000 €","4'000 €","8'000 €","16'000 €","32'000 €","64'000 €","125'000 €","500'000 €","1'000'000 €"];
 const $ = selector => document.querySelector(selector);
@@ -22,7 +24,9 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const state = {
   teacherGames: [],
   teacherFolders: [],
-  currentFolder: null,
+  teacherCreators: [],
+  currentCreatorId: null,
+  currentFolderId: null,
   editorId: null,
   editorCreatedAt: null,
   editorQuestions: [],
@@ -99,7 +103,9 @@ async function handleAction(action, button) {
   if (action === 'teacher-logout') return logoutTeacher();
   if (action === 'teacher-refresh' || action === 'teacher-show-games') return openTeacherHome();
   if (action === 'teacher-new-game') return openEditor();
-  if (action === 'teacher-new-folder') return createFolder();
+  if (action === 'teacher-new-creator') return openCreatorDialog();
+  if (action === 'teacher-new-folder') return openFolderDialog();
+  if (action === 'creator-up') return openCreator(null);
   if (action === 'folder-up') return openFolder(null);
   if (action === 'teacher-open-dashboard') return openDashboard();
   if (action === 'analysis-picker') return openDashboard();
@@ -129,15 +135,27 @@ async function handleAction(action, button) {
     const game = gameById(button.dataset.id);
     if (game) showGameCode(game);
   }
-  if (action === 'folder-open') return openFolder(button.dataset.folder || '');
-  if (action === 'folder-delete') return deleteFolder(button.dataset.folderId || '', button.dataset.folder || '');
+  if (action === 'creator-open') return openCreator(button.dataset.creatorId || '__unassigned__');
+  if (action === 'creator-edit') {
+    const creator = creatorById(button.dataset.creatorId);
+    if (creator) return openCreatorDialog(creator);
+  }
+  if (action === 'creator-save') return saveCreatorDialog(button.dataset.creatorId || '');
+  if (action === 'creator-delete') return deleteCreator(button.dataset.creatorId || '');
+  if (action === 'folder-open') return openFolder(button.dataset.folderId || '');
+  if (action === 'folder-edit') {
+    const folder = folderById(button.dataset.folderId);
+    if (folder) return openFolderDialog(folder);
+  }
+  if (action === 'folder-save') return saveFolderDialog(button.dataset.folderId || '');
+  if (action === 'folder-delete') return deleteFolder(button.dataset.folderId || '');
   if (action === 'game-move') {
     const game = gameById(button.dataset.id);
     if (game) showMoveGame(game);
   }
-  if (action === 'move-game-folder') {
+  if (action === 'move-game-structure') {
     const game = gameById(button.dataset.id);
-    if (game) await moveGame(game, button.dataset.folder || '');
+    if (game) await moveGame(game, button.dataset.creatorId || '', button.dataset.folderId || '');
   }
   if (action === 'analysis-game') {
     const game = gameById(button.dataset.id);
@@ -223,10 +241,16 @@ async function logoutTeacher() {
 
 async function openTeacherHome() {
   if (!teacherToken()) return openTeacherLogin();
-  const [games, folders] = await Promise.all([teacherGamesList(), teacherFoldersList()]);
+  const [games, folders, creators] = await Promise.all([
+    teacherGamesList(),
+    teacherFoldersList(),
+    teacherCreatorsList()
+  ]);
   state.teacherGames = games || [];
   state.teacherFolders = folders || [];
-  state.currentFolder = null;
+  state.teacherCreators = creators || [];
+  state.currentCreatorId = null;
+  state.currentFolderId = null;
   renderTeacherGames();
   showScreen('teacher');
 }
@@ -235,156 +259,369 @@ function gameById(id) {
   return state.teacherGames.find(game => game.id === id);
 }
 
+function creatorById(id) {
+  return state.teacherCreators.find(creator => String(creator.id) === String(id));
+}
+
+function folderById(id) {
+  return state.teacherFolders.find(folder => String(folder.id) === String(id));
+}
+
+function normalizeCreatorColor(value) {
+  const color = String(value || '').trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : '#6f83ff';
+}
+
+function creatorIdValue(value) {
+  return value && value !== '__unassigned__' ? String(value) : '';
+}
+
+function gameCreatorId(game) {
+  return String(game?.creatorId || '');
+}
+
+function gameFolderId(game) {
+  return String(game?.folderId || '');
+}
+
+function folderCreatorId(folder) {
+  return String(folder?.creatorId || '');
+}
+
 function renderTeacherGames() {
   const box = $('#teacher-games');
   box.replaceChildren();
-  const current = state.currentFolder;
 
-  const folderNames = [...new Set([
-    ...state.teacherFolders.map(folder => String(folder.name || '').trim()),
-    ...state.teacherGames.map(game => String(game.folder || '').trim())
-  ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de-CH', { sensitivity: 'base' }));
-
-  if (current == null) {
+  if (state.currentCreatorId == null) {
     $('#teacher-section-title').textContent = 'Meine Spiele';
-    $('#teacher-section-subtitle').textContent = `${state.teacherGames.length} gespeicherte Spiele · ${folderNames.length} Ordner`;
-    $('#teacher-empty').classList.toggle('hidden', state.teacherGames.length > 0 || folderNames.length > 0);
+    $('#teacher-section-subtitle').textContent = `${state.teacherGames.length} gespeicherte Spiele · ${state.teacherCreators.length} Creator`;
+    $('#teacher-empty').classList.toggle('hidden', state.teacherGames.length > 0 || state.teacherCreators.length > 0 || state.teacherFolders.length > 0);
 
-    if (folderNames.length) {
-      const folderGrid = document.createElement('div');
-      folderGrid.className = 'folder-grid-v3';
-      for (const name of folderNames) {
-        const folderRecord = state.teacherFolders.find(folder => folder.name === name);
-        const count = state.teacherGames.filter(game => String(game.folder || '').trim() === name).length;
-        const card = document.createElement('button');
-        card.type = 'button';
-        card.className = 'folder-card-v3';
-        card.dataset.action = 'folder-open';
-        card.dataset.folder = name;
-        card.innerHTML = `<span class="folder-icon-v3">📁</span><strong></strong><small>${count} ${count === 1 ? 'Spiel' : 'Spiele'}</small>`;
-        card.querySelector('strong').textContent = name;
-        if (folderRecord?.id) card.dataset.folderId = folderRecord.id;
-        folderGrid.append(card);
-      }
-      box.append(folderGrid);
+    const creatorGrid = document.createElement('div');
+    creatorGrid.className = 'creator-grid-v4';
+
+    for (const creator of state.teacherCreators) {
+      const creatorGames = state.teacherGames.filter(game => gameCreatorId(game) === String(creator.id));
+      const creatorFolders = state.teacherFolders.filter(folder => folderCreatorId(folder) === String(creator.id));
+      creatorGrid.append(renderCreatorCard(creator, creatorGames.length, creatorFolders.length));
     }
 
-    const rootGames = state.teacherGames.filter(game => !String(game.folder || '').trim());
-    if (rootGames.length) {
-      const heading = document.createElement('div');
-      heading.className = 'explorer-heading-v3';
-      heading.innerHTML = '<strong>Spiele ohne Ordner</strong><span></span>';
-      heading.querySelector('span').textContent = `${rootGames.length} ${rootGames.length === 1 ? 'Spiel' : 'Spiele'}`;
-      box.append(heading);
-      const grid = document.createElement('div');
-      grid.className = 'game-grid-v3';
-      for (const game of rootGames) grid.append(renderTeacherGameCard(game));
-      box.append(grid);
+    const unassignedGames = state.teacherGames.filter(game => !gameCreatorId(game));
+    const unassignedFolders = state.teacherFolders.filter(folder => !folderCreatorId(folder));
+    if (unassignedGames.length || unassignedFolders.length) {
+      creatorGrid.append(renderCreatorCard(null, unassignedGames.length, unassignedFolders.length));
+    }
+
+    if (creatorGrid.children.length) box.append(creatorGrid);
+
+    if (!creatorGrid.children.length && !state.teacherGames.length) {
+      const empty = document.createElement('div');
+      empty.className = 'folder-empty-v3';
+      empty.innerHTML = '<div>👤</div><strong>Noch keine Creator</strong><p>Erstelle einen Creator und ordne danach Ordner und Spiele diesem Bereich zu.</p>';
+      box.append(empty);
     }
     return;
   }
 
-  const folderRecord = state.teacherFolders.find(folder => folder.name === current);
-  const games = state.teacherGames.filter(game => String(game.folder || '').trim() === current);
-  $('#teacher-section-title').textContent = `📁 ${current}`;
-  $('#teacher-section-subtitle').textContent = `${games.length} ${games.length === 1 ? 'Spiel' : 'Spiele'} in diesem Ordner`;
+  const creatorId = creatorIdValue(state.currentCreatorId);
+  const creator = creatorById(creatorId);
+  const currentFolder = state.currentFolderId ? folderById(state.currentFolderId) : null;
+  const color = creator ? normalizeCreatorColor(creator.color) : '#69739f';
+
+  if (!currentFolder) {
+    $('#teacher-section-title').textContent = creator ? `Creator: ${creator.name}` : 'Ohne Creator';
+    const creatorGames = state.teacherGames.filter(game => gameCreatorId(game) === creatorId);
+    const folders = state.teacherFolders.filter(folder => folderCreatorId(folder) === creatorId);
+    $('#teacher-section-subtitle').textContent = `${creatorGames.length} ${creatorGames.length === 1 ? 'Spiel' : 'Spiele'} · ${folders.length} Ordner`;
+    $('#teacher-empty').classList.add('hidden');
+
+    const toolbar = document.createElement('div');
+    toolbar.className = 'folder-toolbar-v3 creator-toolbar-v4';
+    toolbar.style.setProperty('--creator-color', color);
+    toolbar.innerHTML = `
+      <button class="btn" data-action="creator-up">← Alle Creator</button>
+      <div class="creator-path-v4"><i></i><strong>${escapeHtml(creator?.name || 'Ohne Creator')}</strong></div>
+      ${creator ? `<button class="btn" data-action="creator-edit" data-creator-id="${creator.id}">Creator bearbeiten</button>` : ''}
+      <button class="btn" data-action="teacher-new-folder">📁 Neuer Ordner</button>`;
+    box.append(toolbar);
+
+    if (folders.length) {
+      const folderGrid = document.createElement('div');
+      folderGrid.className = 'folder-grid-v3';
+      for (const folder of folders) folderGrid.append(renderFolderCard(folder, color));
+      box.append(folderGrid);
+    }
+
+    const looseGames = creatorGames.filter(game => !gameFolderId(game));
+    if (looseGames.length) {
+      const heading = document.createElement('div');
+      heading.className = 'explorer-heading-v3';
+      heading.innerHTML = '<strong>Spiele ohne Ordner</strong><span></span>';
+      heading.querySelector('span').textContent = `${looseGames.length} ${looseGames.length === 1 ? 'Spiel' : 'Spiele'}`;
+      box.append(heading);
+      const grid = document.createElement('div');
+      grid.className = 'game-grid-v3';
+      for (const game of looseGames) grid.append(renderTeacherGameCard(game));
+      box.append(grid);
+    }
+
+    if (!folders.length && !looseGames.length) {
+      const empty = document.createElement('div');
+      empty.className = 'folder-empty-v3';
+      empty.innerHTML = '<div>📂</div><strong>Dieser Creator Bereich ist leer</strong><p>Erstelle einen Ordner oder ein neues Spiel.</p>';
+      box.append(empty);
+    }
+    return;
+  }
+
+  const folderGames = state.teacherGames.filter(game => gameFolderId(game) === String(currentFolder.id));
+  $('#teacher-section-title').textContent = `📁 ${currentFolder.name}`;
+  $('#teacher-section-subtitle').textContent = `${folderGames.length} ${folderGames.length === 1 ? 'Spiel' : 'Spiele'} · ${creator?.name || 'Ohne Creator'}`;
   $('#teacher-empty').classList.add('hidden');
 
   const toolbar = document.createElement('div');
   toolbar.className = 'folder-toolbar-v3';
   toolbar.innerHTML = `
-    <button class="btn" data-action="folder-up">← Meine Spiele</button>
-    <div class="folder-path-v3"><span>Meine Spiele</span><b>›</b><strong></strong></div>
-    ${folderRecord?.id ? `<button class="btn danger-btn" data-action="folder-delete" data-folder-id="${folderRecord.id}" data-folder="${escapeHtml(current)}">Ordner löschen</button>` : ''}`;
-  toolbar.querySelector('.folder-path-v3 strong').textContent = current;
+    <button class="btn" data-action="folder-up">← ${escapeHtml(creator?.name || 'Ohne Creator')}</button>
+    <div class="folder-path-v3"><span>${escapeHtml(creator?.name || 'Ohne Creator')}</span><b>›</b><strong>${escapeHtml(currentFolder.name)}</strong></div>
+    <button class="btn" data-action="folder-edit" data-folder-id="${currentFolder.id}">Ordner bearbeiten</button>
+    <button class="btn danger-btn" data-action="folder-delete" data-folder-id="${currentFolder.id}">Ordner löschen</button>`;
   box.append(toolbar);
 
-  if (!games.length) {
+  if (!folderGames.length) {
     const empty = document.createElement('div');
     empty.className = 'folder-empty-v3';
-    empty.innerHTML = '<div>📂</div><strong>Dieser Ordner ist leer</strong><p>Verschiebe ein bestehendes Spiel hierher oder erstelle ein neues Spiel in diesem Ordner.</p>';
+    empty.innerHTML = '<div>📂</div><strong>Dieser Ordner ist leer</strong><p>Verschiebe ein bestehendes Spiel hierher oder erstelle ein neues Spiel.</p>';
     box.append(empty);
     return;
   }
 
   const grid = document.createElement('div');
   grid.className = 'game-grid-v3';
-  for (const game of games) grid.append(renderTeacherGameCard(game));
+  for (const game of folderGames) grid.append(renderTeacherGameCard(game));
   box.append(grid);
+}
+
+function renderCreatorCard(creator, gameCount, folderCount) {
+  const id = creator?.id || '__unassigned__';
+  const color = normalizeCreatorColor(creator?.color || '#69739f');
+  const card = document.createElement('article');
+  card.className = 'creator-card-v4';
+  card.style.setProperty('--creator-color', color);
+  card.innerHTML = `
+    <button type="button" class="creator-open-v4" data-action="creator-open" data-creator-id="${id}">
+      <span class="creator-avatar-v4">${creator ? 'C' : '—'}</span>
+      <span class="creator-copy-v4"><strong></strong><small>${folderCount} Ordner · ${gameCount} ${gameCount === 1 ? 'Spiel' : 'Spiele'}</small></span>
+    </button>
+    ${creator ? `<button class="btn small creator-edit-v4" data-action="creator-edit" data-creator-id="${creator.id}">Bearbeiten</button>` : ''}`;
+  card.querySelector('.creator-copy-v4 strong').textContent = creator?.name || 'Ohne Creator';
+  return card;
+}
+
+function renderFolderCard(folder, fallbackColor) {
+  const color = normalizeCreatorColor(folder.creatorColor || fallbackColor || '#69739f');
+  const count = state.teacherGames.filter(game => gameFolderId(game) === String(folder.id)).length;
+  const card = document.createElement('article');
+  card.className = 'folder-card-v4';
+  card.style.setProperty('--creator-color', color);
+  card.innerHTML = `
+    <button type="button" class="folder-open-v4" data-action="folder-open" data-folder-id="${folder.id}">
+      <span class="folder-icon-v4">▰</span>
+      <strong></strong>
+      <small>${count} ${count === 1 ? 'Spiel' : 'Spiele'}</small>
+    </button>
+    <button class="btn small" data-action="folder-edit" data-folder-id="${folder.id}">Bearbeiten</button>`;
+  card.querySelector('.folder-open-v4 strong').textContent = folder.name || 'Ordner';
+  return card;
 }
 
 function renderTeacherGameCard(game) {
   const card = document.createElement('article');
   card.className = 'game-card-v3';
   const questionCount = Array.isArray(game.questions) ? game.questions.length : 0;
+  const creator = creatorById(gameCreatorId(game));
+  const folder = folderById(gameFolderId(game));
+  const color = normalizeCreatorColor(game.creatorColor || creator?.color || '#69739f');
+  card.style.setProperty('--creator-color', color);
   card.innerHTML = `
+    <div class="game-creator-line-v4"><i></i><span></span></div>
     <h3></h3>
-    <div class="game-card-meta">${questionCount} Fragen · Code ${escapeHtml(game.joinCode || '------')} · geändert ${formatDate(game.updatedAt)}</div>
+    <div class="game-card-meta">${questionCount} Fragen · geändert ${formatDate(game.updatedAt)}</div>
     <div class="game-card-actions">
       <button class="btn primary" data-action="game-beamer" data-id="${game.id}">Beamer</button>
-      <button class="btn" data-action="game-code" data-id="${game.id}">Code anzeigen</button>
       <button class="btn" data-action="game-move" data-id="${game.id}">📁 Verschieben</button>
       <button class="btn" data-action="game-edit" data-id="${game.id}">Bearbeiten</button>
       <button class="btn" data-action="game-duplicate" data-id="${game.id}">Duplizieren</button>
       <button class="btn danger-btn" data-action="game-delete" data-id="${game.id}">Löschen</button>
     </div>`;
   card.querySelector('h3').textContent = game.title;
+  card.querySelector('.game-creator-line-v4 span').textContent = `${creator?.name || 'Ohne Creator'}${folder ? ` · ${folder.name}` : ''}`;
   return card;
 }
 
-async function createFolder() {
-  const proposed = prompt('Name des neuen Ordners:');
-  if (proposed == null) return;
-  const name = proposed.trim();
-  if (!name) return;
-  const folder = await teacherFolderCreate(name);
-  state.teacherFolders = await teacherFoldersList();
-  state.currentFolder = folder?.name || name;
-  renderTeacherGames();
-  toast(`Ordner «${state.currentFolder}» erstellt.`);
-}
-
-function openFolder(name) {
-  state.currentFolder = name ? String(name) : null;
+function openCreator(id) {
+  state.currentCreatorId = id == null ? null : String(id);
+  state.currentFolderId = null;
   renderTeacherGames();
 }
 
-async function deleteFolder(folderId, name) {
-  if (!folderId) return;
-  const count = state.teacherGames.filter(game => String(game.folder || '').trim() === name).length;
-  const extra = count ? ` Die ${count} ${count === 1 ? 'Spiel' : 'Spiele'} werden zu «Ohne Ordner» verschoben.` : '';
-  if (!confirm(`Ordner «${name}» wirklich löschen?${extra}`)) return;
-  await teacherFolderDelete(folderId);
-  const [games, folders] = await Promise.all([teacherGamesList(), teacherFoldersList()]);
+function openFolder(id) {
+  if (!id) {
+    state.currentFolderId = null;
+    renderTeacherGames();
+    return;
+  }
+  const folder = folderById(id);
+  if (!folder) return;
+  state.currentCreatorId = folderCreatorId(folder) || '__unassigned__';
+  state.currentFolderId = String(folder.id);
+  renderTeacherGames();
+}
+
+function openCreatorDialog(creator = null) {
+  const color = normalizeCreatorColor(creator?.color || '#6f83ff');
+  modal(`
+    <p class="eyebrow">Creator</p>
+    <h3>${creator ? 'Creator bearbeiten' : 'Neuen Creator erstellen'}</h3>
+    <label class="field-label">Name</label>
+    <input id="creator-dialog-name" class="text-input" maxlength="80" value="${escapeHtml(creator?.name || '')}" placeholder="z. B. Lars">
+    <label class="field-label creator-color-label-v4">Farbe</label>
+    <div class="creator-color-picker-v4">
+      <input id="creator-dialog-color" type="color" value="${color}">
+      <span>Diese Farbe wird für den Creator und seine Ordner verwendet.</span>
+    </div>
+    <div class="modal-actions">
+      ${creator ? `<button class="btn danger-btn" data-action="creator-delete" data-creator-id="${creator.id}">Creator löschen</button>` : ''}
+      <button class="btn" data-modal="close">Abbrechen</button>
+      <button class="btn primary" data-action="creator-save" data-creator-id="${creator?.id || ''}">Speichern</button>
+    </div>`, false, false);
+  setTimeout(() => $('#creator-dialog-name')?.focus(), 20);
+}
+
+async function saveCreatorDialog(creatorId = '') {
+  const name = $('#creator-dialog-name')?.value.trim() || '';
+  const color = normalizeCreatorColor($('#creator-dialog-color')?.value);
+  if (!name) throw new Error('Bitte einen Creator Namen eingeben.');
+
+  const creator = creatorId
+    ? await teacherCreatorUpdate(creatorId, name, color)
+    : await teacherCreatorEnsure(name, color);
+
+  const [games, folders, creators] = await Promise.all([teacherGamesList(), teacherFoldersList(), teacherCreatorsList()]);
   state.teacherGames = games || [];
   state.teacherFolders = folders || [];
-  state.currentFolder = null;
+  state.teacherCreators = creators || [];
+  state.currentCreatorId = creator?.id || creatorId || null;
+  state.currentFolderId = null;
+  closeModal(true);
+  renderTeacherGames();
+  toast(`Creator «${creator?.name || name}» gespeichert.`);
+}
+
+async function deleteCreator(creatorId) {
+  const creator = creatorById(creatorId);
+  if (!creator) return;
+  if (!confirm(`Creator «${creator.name}» wirklich löschen? Ordner und Spiele bleiben erhalten und werden zu «Ohne Creator» verschoben.`)) return;
+  await teacherCreatorDelete(creatorId);
+  const [games, folders, creators] = await Promise.all([teacherGamesList(), teacherFoldersList(), teacherCreatorsList()]);
+  state.teacherGames = games || [];
+  state.teacherFolders = folders || [];
+  state.teacherCreators = creators || [];
+  state.currentCreatorId = null;
+  state.currentFolderId = null;
+  closeModal(true);
+  renderTeacherGames();
+  toast('Creator gelöscht. Ordner und Spiele bleiben erhalten.');
+}
+
+function openFolderDialog(folder = null) {
+  const currentCreatorId = folder?.creatorId || creatorIdValue(state.currentCreatorId);
+  const creatorOptions = [
+    '<option value="">Ohne Creator</option>',
+    ...state.teacherCreators.map(creator => `<option value="${creator.id}"${String(creator.id) === String(currentCreatorId) ? ' selected' : ''}>${escapeHtml(creator.name)}</option>`)
+  ].join('');
+
+  modal(`
+    <p class="eyebrow">Ordner</p>
+    <h3>${folder ? 'Ordner bearbeiten' : 'Neuen Ordner erstellen'}</h3>
+    <label class="field-label">Name</label>
+    <input id="folder-dialog-name" class="text-input" maxlength="80" value="${escapeHtml(folder?.name || '')}" placeholder="z. B. VWL">
+    <label class="field-label creator-color-label-v4">Creator</label>
+    <select id="folder-dialog-creator" class="text-input">${creatorOptions}</select>
+    <div class="modal-actions">
+      <button class="btn" data-modal="close">Abbrechen</button>
+      <button class="btn primary" data-action="folder-save" data-folder-id="${folder?.id || ''}">Speichern</button>
+    </div>`, false, false);
+  setTimeout(() => $('#folder-dialog-name')?.focus(), 20);
+}
+
+async function saveFolderDialog(folderId = '') {
+  const name = $('#folder-dialog-name')?.value.trim() || '';
+  const creatorId = $('#folder-dialog-creator')?.value || '';
+  if (!name) throw new Error('Bitte einen Ordnernamen eingeben.');
+
+  const folder = await teacherFolderSave(folderId || null, name, creatorId || null);
+  const [games, folders, creators] = await Promise.all([teacherGamesList(), teacherFoldersList(), teacherCreatorsList()]);
+  state.teacherGames = games || [];
+  state.teacherFolders = folders || [];
+  state.teacherCreators = creators || [];
+  state.currentCreatorId = folder?.creatorId || '__unassigned__';
+  state.currentFolderId = folder?.id || folderId || null;
+  closeModal(true);
+  renderTeacherGames();
+  toast(`Ordner «${folder?.name || name}» gespeichert.`);
+}
+
+async function deleteFolder(folderId) {
+  const folder = folderById(folderId);
+  if (!folder) return;
+  const count = state.teacherGames.filter(game => gameFolderId(game) === String(folderId)).length;
+  const extra = count ? ` Die ${count} ${count === 1 ? 'Spiel' : 'Spiele'} bleiben beim gleichen Creator, aber ohne Ordner.` : '';
+  if (!confirm(`Ordner «${folder.name}» wirklich löschen?${extra}`)) return;
+  await teacherFolderDelete(folderId);
+  const [games, folders, creators] = await Promise.all([teacherGamesList(), teacherFoldersList(), teacherCreatorsList()]);
+  state.teacherGames = games || [];
+  state.teacherFolders = folders || [];
+  state.teacherCreators = creators || [];
+  state.currentCreatorId = folderCreatorId(folder) || '__unassigned__';
+  state.currentFolderId = null;
   renderTeacherGames();
   toast('Ordner gelöscht. Spiele bleiben erhalten.');
 }
 
 function showMoveGame(game) {
-  const folders = [...new Set(state.teacherFolders.map(folder => String(folder.name || '').trim()).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, 'de-CH', { sensitivity: 'base' }));
-  const current = String(game.folder || '').trim();
-  const choices = [
-    `<button class="folder-choice-v3${!current ? ' active' : ''}" data-action="move-game-folder" data-id="${game.id}" data-folder=""><span>🗂️</span><strong>Ohne Ordner</strong>${!current ? '<small>Aktuell</small>' : ''}</button>`,
-    ...folders.map(name => `<button class="folder-choice-v3${current === name ? ' active' : ''}" data-action="move-game-folder" data-id="${game.id}" data-folder="${escapeHtml(name)}"><span>📁</span><strong>${escapeHtml(name)}</strong>${current === name ? '<small>Aktuell</small>' : ''}</button>`)
-  ].join('');
+  const choices = [];
+
+  choices.push(`<button class="folder-choice-v3${!gameCreatorId(game) && !gameFolderId(game) ? ' active' : ''}" data-action="move-game-structure" data-id="${game.id}" data-creator-id="" data-folder-id=""><span>🗂️</span><strong>Ohne Creator</strong><small>Ohne Ordner</small></button>`);
+
+  for (const folder of state.teacherFolders.filter(folder => !folderCreatorId(folder))) {
+    choices.push(`<button class="folder-choice-v3${gameFolderId(game) === String(folder.id) ? ' active' : ''}" data-action="move-game-structure" data-id="${game.id}" data-creator-id="" data-folder-id="${folder.id}"><span>📁</span><strong>${escapeHtml(folder.name)}</strong><small>Ohne Creator</small></button>`);
+  }
+
+  for (const creator of state.teacherCreators) {
+    const activeRoot = gameCreatorId(game) === String(creator.id) && !gameFolderId(game);
+    choices.push(`<button class="folder-choice-v3${activeRoot ? ' active' : ''}" data-action="move-game-structure" data-id="${game.id}" data-creator-id="${creator.id}" data-folder-id=""><span style="color:${normalizeCreatorColor(creator.color)}">●</span><strong>${escapeHtml(creator.name)}</strong><small>Ohne Ordner</small></button>`);
+    for (const folder of state.teacherFolders.filter(item => folderCreatorId(item) === String(creator.id))) {
+      choices.push(`<button class="folder-choice-v3${gameFolderId(game) === String(folder.id) ? ' active' : ''}" data-action="move-game-structure" data-id="${game.id}" data-creator-id="${creator.id}" data-folder-id="${folder.id}"><span>📁</span><strong>${escapeHtml(folder.name)}</strong><small>${escapeHtml(creator.name)}</small></button>`);
+    }
+  }
+
   modal(`
     <p class="eyebrow">Spiel verschieben</p>
     <h3>${escapeHtml(game.title)}</h3>
-    <p class="section-muted">Wähle den Zielordner.</p>
-    <div class="folder-choice-grid-v3">${choices}</div>
+    <p class="section-muted">Wähle einen Creator Bereich oder einen Ordner.</p>
+    <div class="folder-choice-grid-v3">${choices.join('')}</div>
     <div class="modal-actions"><button class="btn" data-modal="close">Abbrechen</button></div>`, false, true);
 }
 
-async function moveGame(game, folder) {
-  await teacherGameMove(game.id, folder || null);
+async function moveGame(game, creatorId, folderId) {
+  await teacherGameMoveStructure(game.id, creatorId || null, folderId || null);
   state.teacherGames = await teacherGamesList();
   closeModal(true);
   renderTeacherGames();
-  toast(folder ? `Spiel nach «${folder}» verschoben.` : 'Spiel zu «Ohne Ordner» verschoben.');
+  const creator = creatorById(creatorId);
+  const folder = folderById(folderId);
+  toast(folder ? `Spiel nach «${folder.name}» verschoben.` : creator ? `Spiel zu «${creator.name}» verschoben.` : 'Spiel zu «Ohne Creator» verschoben.');
 }
 
 function formatDate(value) {
@@ -397,7 +634,8 @@ async function duplicateGame(game) {
   const copy = {
     id: crypto.randomUUID(),
     title: `${game.title} Kopie`,
-    folder: game.folder || '',
+    creatorId: game.creatorId || null,
+    folderId: game.folderId || null,
     questions: game.questions.map(question => ({ ...question, id: crypto.randomUUID(), wrong: [...question.wrong] }))
   };
   await teacherGameSave(copy);
@@ -412,6 +650,41 @@ async function deleteGame(game) {
   await openTeacherHome();
 }
 
+function creatorByName(name) {
+  const value = String(name || '').trim().toLocaleLowerCase('de-CH');
+  return state.teacherCreators.find(creator => String(creator.name || '').trim().toLocaleLowerCase('de-CH') === value);
+}
+
+function refreshEditorFolderOptions(selectedFolderId = '') {
+  const select = $('#editor-game-folder-select');
+  if (!select) return;
+  const creator = creatorByName($('#editor-game-creator')?.value);
+  const creatorId = creator?.id || '';
+  const folders = state.teacherFolders.filter(folder => folderCreatorId(folder) === String(creatorId));
+  select.replaceChildren();
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = 'Ohne Ordner';
+  select.append(empty);
+  for (const folder of folders.slice().sort((a,b) => String(a.name).localeCompare(String(b.name),'de-CH',{sensitivity:'base'}))) {
+    const option = document.createElement('option');
+    option.value = folder.id;
+    option.textContent = folder.name;
+    select.append(option);
+  }
+  if ([...select.options].some(option => option.value === String(selectedFolderId || ''))) {
+    select.value = String(selectedFolderId || '');
+  }
+}
+
+function syncEditorCreatorFields() {
+  const input = $('#editor-game-creator');
+  const color = $('#editor-creator-color');
+  const creator = creatorByName(input?.value);
+  if (creator && color) color.value = normalizeCreatorColor(creator.color);
+  refreshEditorFolderOptions();
+}
+
 function openEditor(game = null) {
   state.editorId = game?.id || null;
   state.editorCreatedAt = game?.createdAt || null;
@@ -423,19 +696,25 @@ function openEditor(game = null) {
   state.importMode = 'simple';
   $('#editor-v3-title').textContent = game ? 'Spiel bearbeiten' : 'Neues Spiel';
   $('#editor-game-title').value = game?.title || '';
-  $('#editor-game-folder').value = game?.folder || state.currentFolder || '';
-  const folderSuggestions = $('#editor-folder-suggestions');
-  folderSuggestions.replaceChildren();
-  [...new Set([
-    ...state.teacherFolders.map(item => String(item.name || '').trim()),
-    ...state.teacherGames.map(item => String(item.folder || '').trim())
-  ].filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, 'de-CH', { sensitivity: 'base' }))
-    .forEach(folder => {
-      const option = document.createElement('option');
-      option.value = folder;
-      folderSuggestions.append(option);
-    });
+
+  const currentCreator = game
+    ? creatorById(game.creatorId)
+    : creatorById(creatorIdValue(state.currentCreatorId));
+  $('#editor-game-creator').value = game?.creatorName || currentCreator?.name || '';
+  $('#editor-creator-color').value = normalizeCreatorColor(game?.creatorColor || currentCreator?.color || '#6f83ff');
+
+  const creatorSuggestions = $('#editor-creator-suggestions');
+  creatorSuggestions.replaceChildren();
+  for (const creator of state.teacherCreators.slice().sort((a,b) => String(a.name).localeCompare(String(b.name),'de-CH',{sensitivity:'base'}))) {
+    const option = document.createElement('option');
+    option.value = creator.name;
+    creatorSuggestions.append(option);
+  }
+
+  refreshEditorFolderOptions(game?.folderId || state.currentFolderId || '');
+  $('#editor-game-creator').oninput = syncEditorCreatorFields;
+  $('#editor-game-creator').onchange = syncEditorCreatorFields;
+
   $('#editor-import-simple').value = '';
   $('#editor-import-csv').value = '';
   $('#editor-import-json').value = '';
@@ -541,15 +820,25 @@ function loadEditorExample() {
 async function saveEditor() {
   syncEditorQuestions();
   const title = $('#editor-game-title').value.trim();
-  const folder = $('#editor-game-folder').value.trim();
+  const creatorName = $('#editor-game-creator').value.trim();
+  const creatorColorValue = normalizeCreatorColor($('#editor-creator-color').value);
+  const folderId = $('#editor-game-folder-select').value || null;
   if (!title) throw new Error('Bitte gib dem Spiel einen Titel.');
   const questions = validateQuestions(state.editorQuestions);
   if (!questions.length) throw new Error('Das Spiel braucht mindestens eine vollständige Frage.');
+
+  let creatorId = null;
+  if (creatorName) {
+    const creator = await teacherCreatorEnsure(creatorName, creatorColorValue);
+    creatorId = creator?.id || null;
+  }
+
   await teacherGameSave({
     id: state.editorId || crypto.randomUUID(),
     createdAt: state.editorCreatedAt || undefined,
     title,
-    folder,
+    creatorId,
+    folderId,
     questions
   });
   toast('Spiel gespeichert.');
@@ -589,14 +878,25 @@ function showHostCode() {
 
 async function openDashboard() {
   stopDashboardPolling();
-  if (!state.teacherGames.length) state.teacherGames = await teacherGamesList();
+  if (!state.teacherGames.length) {
+    const [games, folders, creators] = await Promise.all([teacherGamesList(), teacherFoldersList(), teacherCreatorsList()]);
+    state.teacherGames = games || [];
+    state.teacherFolders = folders || [];
+    state.teacherCreators = creators || [];
+  }
 
-  const rows = state.teacherGames.map(game => `
-    <div class="history-row">
-      <div><strong>${escapeHtml(game.title || 'Spiel')}</strong><br><small>Code ${escapeHtml(game.joinCode || '------')}</small></div>
-      <span>${Array.isArray(game.questions) ? game.questions.length : 0} Fragen</span>
-      <button class="btn primary small" data-action="analysis-game" data-id="${game.id}">Analyse öffnen</button>
-    </div>`).join('');
+  const rows = state.teacherGames.map(game => {
+    const creator = creatorById(game.creatorId);
+    const folder = folderById(game.folderId);
+    const meta = [creator?.name || 'Ohne Creator', folder?.name].filter(Boolean).join(' · ');
+    const color = normalizeCreatorColor(game.creatorColor || creator?.color || '#69739f');
+    return `
+      <div class="history-row analysis-row-v4">
+        <div><strong>${escapeHtml(game.title || 'Spiel')}</strong><br><small><i style="background:${color}"></i>${escapeHtml(meta)}</small></div>
+        <span>${Array.isArray(game.questions) ? game.questions.length : 0} Fragen</span>
+        <button class="btn primary small" data-action="analysis-game" data-id="${game.id}">Analyse öffnen</button>
+      </div>`;
+  }).join('');
 
   modal(`
     <p class="eyebrow">Live Analyse</p>
@@ -648,7 +948,6 @@ function renderDashboard(data) {
   const summary = data.summary || {};
   $('#host-game-name').textContent = session.title || 'Spielanalyse';
   $('#host-title').textContent = session.title || '';
-  $('#host-join-code').textContent = session.joinCode || '------';
   $('#metric-total').textContent = summary.total ?? 0;
   $('#metric-online').textContent = summary.online ?? 0;
   $('#metric-active').textContent = summary.active ?? 0;
