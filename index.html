@@ -73,6 +73,7 @@
           <button class="nav-card" data-action="teacher-show-games"><strong>🎯 Meine Spiele</strong><span>Creator, Ordner, Beamer, Bearbeiten, Duplizieren und Freigaben.</span></button>
           <button class="nav-card" data-action="teacher-open-dashboard"><strong>📊 Live Analyse</strong><span>Spielstände und Ergebnisse der Lernenden sehen.</span></button>
           <button class="nav-card" data-action="teacher-history"><strong>🕘 Verlauf</strong><span>Vergangene Spielaktivitäten ansehen.</span></button>
+          <button class="nav-card" data-action="teacher-trash"><strong>🗑️ Papierkorb</strong><span>Gelöschte Spiele ansehen und wiederherstellen.</span></button>
         </div>
 
         <section class="teacher-section" id="teacher-main-section">
@@ -81,7 +82,7 @@
               <h2 id="teacher-section-title">Meine Spiele</h2>
               <div id="teacher-section-subtitle" class="section-muted"></div>
             </div>
-            <div class="teacher-actions"><button class="btn" data-action="teacher-new-creator">＋ Creator</button><button class="btn" data-action="teacher-new-folder">📁 Neuer Ordner</button><button class="btn primary" data-action="teacher-new-game">Neues Spiel</button></div>
+            <div class="teacher-actions"><button class="btn" data-action="teacher-new-creator">＋ Creator</button><button class="btn primary" data-action="teacher-new-game">Neues Spiel</button></div>
           </div>
           <div id="teacher-games" class="folder-list-v3"></div>
           <div id="teacher-empty" class="empty-state hidden">
@@ -318,6 +319,6 @@
     <div id="modal-content" class="modal-card"></div>
   </div>
 
-  <script type="module" src="js/app-v3.js?v=20261002-creators1"></script>
+  <script type="module" src="js/app-v3.js?v=20261002-trash1"></script>
 </body>
 </html>
