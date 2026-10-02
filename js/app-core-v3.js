@@ -6,7 +6,7 @@ import {
 } from './audio.js';
 import {
   isBackendConfigured, teacherToken, teacherLogin, teacherLogout,
-  teacherGamesList, teacherGameSave, teacherGameDelete, teacherGameMove,
+  teacherGamesList, teacherGameSave, teacherGameDelete, teacherTrashList, teacherGameRestore, teacherGameMove,
   teacherFoldersList, teacherFolderCreate, teacherFolderDelete,
   teacherCreatorsList, teacherCreatorEnsure, teacherCreatorUpdate, teacherCreatorDelete,
   teacherFolderSave, teacherGameMoveStructure,
@@ -14,7 +14,7 @@ import {
   studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
   friendlyBackendError
-} from './backend-v3.js?v=20261002-creators1';
+} from './backend-v3.js?v=20261002-trash1';
 
 const money = ["50 €","100 €","200 €","300 €","500 €","1'000 €","2'000 €","4'000 €","8'000 €","16'000 €","32'000 €","64'000 €","125'000 €","500'000 €","1'000'000 €"];
 const $ = selector => document.querySelector(selector);
@@ -110,6 +110,7 @@ async function handleAction(action, button) {
   if (action === 'teacher-open-dashboard') return openDashboard();
   if (action === 'analysis-picker') return openDashboard();
   if (action === 'teacher-history') return openHistory();
+  if (action === 'teacher-trash') return openTrash();
   if (action === 'editor-cancel') return openTeacherHome();
   if (action === 'editor-save') return saveEditor();
   if (action === 'editor-example') return loadEditorExample();
@@ -173,6 +174,7 @@ async function handleAction(action, button) {
     const game = gameById(button.dataset.id);
     if (game) await deleteGame(game);
   }
+  if (action === 'trash-restore') return restoreTrashGame(button.dataset.id || '');
 }
 
 function showScreen(name) {
@@ -644,10 +646,37 @@ async function duplicateGame(game) {
 }
 
 async function deleteGame(game) {
-  if (!confirm(`«${game.title}» wirklich löschen?`)) return;
+  if (!confirm(`«${game.title}» in den Papierkorb verschieben? Bereits gestartete Lernende können das Spiel weiterhin fertigspielen.`)) return;
   await teacherGameDelete(game.id);
-  toast('Spiel gelöscht.');
+  toast('Spiel in den Papierkorb verschoben.');
   await openTeacherHome();
+}
+
+async function openTrash() {
+  const items = await teacherTrashList();
+  const rows = (items || []).map(item => {
+    const meta = [item.creatorName || 'Ohne Creator', item.folderName].filter(Boolean).join(' · ');
+    const deleted = item.deletedAt ? new Date(item.deletedAt).toLocaleString('de-CH') : '';
+    return `
+      <div class="trash-row-v4">
+        <div class="trash-main-v4"><strong>${escapeHtml(item.title || 'Spiel')}</strong><small>${escapeHtml(meta)} · ${Number(item.questionCount || 0)} Fragen${deleted ? ` · Papierkorb seit ${escapeHtml(deleted)}` : ''}</small></div>
+        <button class="btn primary" data-action="trash-restore" data-id="${item.id}">Wiederherstellen</button>
+      </div>`;
+  }).join('');
+
+  modal(`
+    <p class="eyebrow">Papierkorb</p>
+    <h3>Gelöschte Spiele</h3>
+    <p class="section-muted">Spiele werden nie endgültig gelöscht. Du kannst sie jederzeit wiederherstellen.</p>
+    <div class="trash-list-v4">${rows || '<div class="empty-state"><p>Der Papierkorb ist leer.</p></div>'}</div>
+    <div class="modal-actions"><button class="btn" data-modal="close">Schliessen</button></div>`, false, true);
+}
+
+async function restoreTrashGame(gameId) {
+  if (!gameId) return;
+  await teacherGameRestore(gameId);
+  toast('Spiel wiederhergestellt.');
+  await openTrash();
 }
 
 function creatorByName(name) {
