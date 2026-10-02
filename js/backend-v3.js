@@ -78,6 +78,8 @@ export const teacherGetSettings = () => teacherRpc('wwm_teacher_get_settings');
 export const teacherGamesList = () => teacherRpc('wwm_teacher_games_list');
 export const teacherGameSave = game => teacherRpc('wwm_teacher_game_save', { p_game: game });
 export const teacherGameDelete = gameId => teacherRpc('wwm_teacher_game_delete', { p_game_id: gameId });
+export const teacherTrashList = () => teacherRpc('wwm_teacher_trash_list');
+export const teacherGameRestore = gameId => teacherRpc('wwm_teacher_game_restore', { p_game_id: gameId });
 export const teacherGameMove = (gameId, folder) => teacherRpc('wwm_teacher_game_move', { p_game_id: gameId, p_folder: folder });
 export const teacherFoldersList = () => teacherRpc('wwm_teacher_folders_list');
 export const teacherFolderCreate = name => teacherRpc('wwm_teacher_folder_create', { p_name: name });
