@@ -1,0 +1,34 @@
+name: Case sensitive answers once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/case-sensitive-answers-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply answer validation update
+        run: python .github/scripts/case_sensitive_answers.py
+      - name: Check JavaScript
+        run: |
+          node --check js/importer.js
+          node --check js/app-core-v3.js
+          node --check js/app-v3.js
+      - name: Verify validation behaviour
+        run: |
+          grep -q "x.normalize('NFC')" js/importer.js
+          grep -q "count(distinct x)" supabase/schema.sql
+      - name: Commit changes
+        run: |
+          git config user.name "ProfLarsSchnyder"
+          git config user.email "lars.schnyder1@gmail.com"
+          git add js/importer.js js/app-core-v3.js js/app-v3.js index.html supabase/schema.sql
+          git commit -m "Allow capitalization-only answer differences"
+          git push
