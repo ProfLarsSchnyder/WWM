@@ -1788,7 +1788,9 @@ function finishGame(won) {
   $('#result-copy').textContent = state.play.mode === 'student'
     ? (won ? `${playerName ? playerName + ', du' : 'Du'} hast das Spiel erfolgreich beendet!` : 'Danke fürs Mitspielen.')
     : (won ? `${playerName ? playerName + ' hat' : 'Der Kandidat oder die Kandidatin hat'} es geschafft!` : 'Die sichere Gewinnstufe.');
-  $('#result-primary').textContent = state.play.mode === 'student' ? 'Zur Startseite' : 'Zurück zum Lehrermodus';
+  const studentResult = state.play.mode === 'student';
+  $('#result-primary').textContent = studentResult ? 'Zur Startseite' : 'Zurück zum Lehrermodus';
+  $('#result-secondary')?.classList.toggle('hidden', studentResult);
   showScreen('result');
   if (won) playCue('outro');
 }
