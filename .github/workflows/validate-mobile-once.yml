@@ -1,0 +1,24 @@
+name: Validate mobile release once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-mobile-once.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript
+        run: |
+          node --check js/app-core-v3.js
+          node --check js/app-v3.js
+          node --check js/access-ui-v4.js
+          node --check js/backend-v3.js
+      - name: Check required mobile hooks
+        run: |
+          grep -q 'id="result-secondary"' index.html
+          grep -q 'Mobile gameplay, isolated from desktop/laptop' styles-v3.css
+          grep -q "classList.toggle('hidden', studentResult)" js/app-core-v3.js
