@@ -1,6 +1,6 @@
 // Stabiler Startpunkt: zuerst die bewährte App laden, danach die neue Zugriffsschicht.
 // Falls die Zugriffsschicht ausfällt, bleibt die Haupt-App trotzdem vollständig bedienbar.
-await import('./app-core-v3.js?v=20261002-trash2');
+await import('./app-core-v3.js?v=20261004-mobile1');
 try {
   await import('./access-ui-v4.js?v=20261002-trash1');
 } catch (error) {
