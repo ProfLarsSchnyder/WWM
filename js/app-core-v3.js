@@ -1,4 +1,4 @@
-import { parseSimpleText, parseCSV, parseJSON, validateQuestions, shuffleAnswers } from './importer.js';
+import { parseSimpleText, parseCSV, parseJSON, validateQuestions, shuffleAnswers } from './importer.js?v=20261004-caseanswers1';
 import {
   playCue, playCueSegment, startLoop, stopAll, stopLoop, stopForeground,
   pauseLoop, resumeLoop, setAudioEnabled, isAudioEnabled,

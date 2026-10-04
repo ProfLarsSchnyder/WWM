@@ -213,7 +213,9 @@ export function validateQuestions(questions, { allowIncomplete = false } = {}) {
     throw new Error(`Frage ${invalid + 1} ist unvollständig. Jede Frage braucht eine richtige und genau drei falsche Antworten.`);
   }
 
-  const duplicate = cleaned.findIndex(q => new Set([q.correct, ...q.wrong].map(x => x.toLowerCase())).size !== 4);
+  // Gross- und Kleinschreibung kann selbst Teil der Aufgabe sein.
+  // Deshalb gelten nur exakt gleiche Antworttexte als Duplikate.
+  const duplicate = cleaned.findIndex(q => new Set([q.correct, ...q.wrong].map(x => x.normalize('NFC'))).size !== 4);
   if (duplicate >= 0) {
     throw new Error(`Frage ${duplicate + 1} enthält doppelte Antworten.`);
   }

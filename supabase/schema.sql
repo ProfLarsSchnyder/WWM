@@ -164,7 +164,9 @@ begin
     if btrim(coalesce(q->>'correct','')) = '' then raise exception 'Frage % enthält keine richtige Antwort', n; end if;
     if jsonb_typeof(q->'wrong') <> 'array' or jsonb_array_length(q->'wrong') <> 3 then raise exception 'Frage % braucht genau drei falsche Antworten', n; end if;
     if exists (select 1 from jsonb_array_elements_text(q->'wrong') x where btrim(x.value) = '') then raise exception 'Frage % enthält eine leere Antwort', n; end if;
-    select count(distinct lower(x)) into answer_count from (
+    -- Gross- und Kleinschreibung kann selbst Teil einer Antwort sein.
+    -- Nur exakt gleiche, getrimmte Texte gelten als Duplikate.
+    select count(distinct x) into answer_count from (
       select btrim(q->>'correct') as x union all
       select btrim(value) from jsonb_array_elements_text(q->'wrong')
     ) s;
