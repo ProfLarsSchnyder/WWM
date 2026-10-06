@@ -1,4 +1,4 @@
-import { rpc, teacherToken } from './backend-v3.js?v=20261002-trash1';
+import { rpc, teacherToken } from './backend-v3.js?v=20261006-practice1';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
