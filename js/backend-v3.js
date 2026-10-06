@@ -170,6 +170,8 @@ export async function studentResume() {
     questionCount: result.questionCount,
     currentQuestionIndex: result.currentQuestionIndex,
     status: result.status,
+    practiceMode: Boolean(result.practiceMode),
+    eliminatedQuestionIndex: result.eliminatedQuestionIndex,
     jokersUsed: result.jokersUsed
   };
   setStudentSession(merged);
@@ -177,6 +179,7 @@ export async function studentResume() {
 }
 
 export const studentGetQuestion = index => studentRpc('wwm_student_get_question', { p_question_index: index });
+export const studentContinuePractice = () => studentRpc('wwm_student_continue_practice');
 export const studentSubmitAnswer = (index, key, responseMs = null) => studentRpc('wwm_student_submit_answer', {
   p_question_index: index,
   p_selected_key: String(key || '').toUpperCase(),
