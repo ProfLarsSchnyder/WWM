@@ -11,10 +11,10 @@ import {
   teacherCreatorsList, teacherCreatorEnsure, teacherCreatorUpdate, teacherCreatorDelete,
   teacherFolderSave, teacherGameMoveStructure,
   teacherStopHost, teacherDashboardGame, teacherResetAnalysis, teacherSessionHistory,
-  studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer,
+  studentJoin, studentSession, studentGetQuestion, studentSubmitAnswer, studentContinuePractice,
   studentUseJoker, studentHeartbeat, studentQuit, clearStudentSession,
   friendlyBackendError
-} from './backend-v3.js?v=20261002-trash1';
+} from './backend-v3.js?v=20261006-practice1';
 
 const money = ["50 €","100 €","200 €","300 €","500 €","1'000 €","2'000 €","4'000 €","8'000 €","16'000 €","32'000 €","64'000 €","125'000 €","500'000 €","1'000'000 €"];
 const $ = selector => document.querySelector(selector);
@@ -127,6 +127,7 @@ async function handleAction(action, button) {
   if (action === 'fullscreen') return toggleFullscreen();
   if (action === 'quit-game') return quitCurrentGame();
   if (action === 'result-primary') return resultPrimary();
+  if (action === 'result-secondary') return resultSecondary();
 
   if (action === 'game-beamer') {
     const game = gameById(button.dataset.id);
@@ -1129,6 +1130,10 @@ function basePlayState(mode) {
     locked: false,
     answers: [],
     finished: false,
+    eliminated: false,
+    practiceMode: false,
+    eliminatedQuestionIndex: null,
+    officialResultIndex: null,
     jokers: { fifty:false, audience:false, phone:false, teacher:false },
     questionStartedAt: performance.now()
   };
@@ -1151,7 +1156,11 @@ function startStudentIntro(session) {
     name: session.studentName,
     className: session.className,
     questionCount: session.questionCount,
-    index: session.currentQuestionIndex || 0
+    index: session.currentQuestionIndex || 0,
+    practiceMode: Boolean(session.practiceMode),
+    eliminated: session.status === 'eliminated',
+    eliminatedQuestionIndex: session.eliminatedQuestionIndex ?? null,
+    officialResultIndex: session.eliminatedQuestionIndex == null ? null : resultIndexAfterFailure(session.eliminatedQuestionIndex)
   });
   state.play = play;
   prepareIntro({ title: session.title, student: true, name: session.studentName, className: session.className });
@@ -1187,7 +1196,9 @@ async function beginQuestions() {
   state.play.name = state.play.mode === 'beamer' ? ($('#contestant-name').value.trim() || 'Kandidat/in') : state.play.name;
   $('#game-title-display').textContent = state.play.title || 'Unterrichtsquiz';
   $('#contestant-display').textContent = state.play.mode === 'student' ? `${state.play.name} · ${state.play.className}` : state.play.name;
-  $('#game-mode-badge').textContent = state.play.mode === 'student' ? 'Lernendenmodus' : 'Beamer Modus';
+  $('#game-mode-badge').textContent = state.play.practiceMode
+    ? 'Trotzdem weiterspielen'
+    : (state.play.mode === 'student' ? 'Lernendenmodus' : 'Beamer Modus');
   $('#screen-game').dataset.mode = state.play.mode;
   $$('[data-joker]').forEach(button => button.classList.toggle('used', Boolean(state.play.jokers[button.dataset.joker])));
   showScreen('game');
@@ -1241,7 +1252,9 @@ async function renderCurrentQuestion() {
   void $('#question-text').offsetWidth;
   $('#question-text').classList.add('enter');
   $('#question-progress').textContent = `Frage ${state.play.index + 1} von ${count}`;
-  $('#game-status').textContent = amountForIndex(state.play.index);
+  $('#game-status').textContent = state.play.practiceMode
+    ? `Erzieltes Resultat: ${officialResultAmount()}`
+    : amountForIndex(state.play.index);
   $('#lock-answer').disabled = true;
   $('#lock-answer').classList.remove('hidden');
   $('#next-question').classList.add('hidden');
@@ -1268,6 +1281,32 @@ async function renderCurrentQuestion() {
 
 function amountForIndex(index) {
   return money[Math.min(Math.max(index, 0), 14)];
+}
+
+function resultIndexAfterFailure(questionIndex) {
+  if (questionIndex >= 10) return 9;
+  if (questionIndex >= 5) return 4;
+  return -1;
+}
+
+function officialResultAmount() {
+  const index = state.play?.officialResultIndex;
+  return index == null || index < 0 ? '0 €' : money[index];
+}
+
+function playQuestionCount() {
+  if (!state.play) return 0;
+  return state.play.mode === 'student'
+    ? Number(state.play.questionCount || 0)
+    : Math.min(state.play.questions?.length || 0, 15);
+}
+
+function canContinueAfterElimination() {
+  return Boolean(
+    state.play?.eliminated &&
+    !state.play.practiceMode &&
+    state.play.index < playQuestionCount() - 1
+  );
 }
 
 function answerRevealDelay(index) {
@@ -1367,13 +1406,28 @@ async function revealAnswer(serverResult = null) {
   if (!isCorrect) {
     chosenElement?.classList.remove('selected');
     chosenElement?.classList.add('wrong');
-    $('#game-status').textContent = `Leider falsch. Richtig ist ${correctKey}.`;
+    $('#game-status').textContent = state.play.practiceMode
+      ? `Leider falsch. Richtig ist ${correctKey}. Dein Resultat bleibt ${officialResultAmount()}.`
+      : `Leider falsch. Richtig ist ${correctKey}.`;
+    $('#lock-answer').classList.add('hidden');
     await playCue(state.play.index === 14 ? 'wrong-million' : 'wrong');
-    return finishGame(false);
+
+    if (!state.play.practiceMode) return finishGame(false);
+
+    const practiceFinal = state.play.mode === 'student'
+      ? serverResult.status === 'practice_completed'
+      : state.play.index >= playQuestionCount() - 1;
+
+    if (practiceFinal) return finishPracticeGame();
+
+    $('#next-question').classList.remove('hidden');
+    return;
   }
 
   chosenElement?.classList.remove('selected');
-  $('#game-status').textContent = `Richtig, ${amountForIndex(state.play.index)}!`;
+  $('#game-status').textContent = state.play.practiceMode
+    ? `Richtig! Dein Resultat bleibt ${officialResultAmount()}.`
+    : `Richtig, ${amountForIndex(state.play.index)}!`;
   $('#lock-answer').classList.add('hidden');
 
   let cue = 'correct-low';
@@ -1382,9 +1436,13 @@ async function revealAnswer(serverResult = null) {
   else if (state.play.index >= 10 && state.play.index < 14) cue = 'correct-high';
   else if (state.play.index >= 14) cue = 'correct-million';
 
-  const isFinal = state.play.mode === 'student'
-    ? serverResult.status === 'completed'
-    : state.play.index >= state.play.questions.length - 1 || state.play.index >= 14;
+  const isFinal = state.play.practiceMode
+    ? (state.play.mode === 'student'
+        ? serverResult.status === 'practice_completed'
+        : state.play.index >= playQuestionCount() - 1)
+    : (state.play.mode === 'student'
+        ? serverResult.status === 'completed'
+        : state.play.index >= playQuestionCount() - 1);
 
   if (!isFinal) {
     $('#next-question').classList.remove('hidden');
@@ -1393,9 +1451,10 @@ async function revealAnswer(serverResult = null) {
   }
 
   await playCue(cue);
+
+  if (state.play.practiceMode) return finishPracticeGame();
   finishGame(true);
 }
-
 async function nextQuestion() {
   if (!state.play?.locked || state.play.finished || state.jokerBusy) return;
   stopAll();
@@ -1754,10 +1813,14 @@ function finishGame(won) {
   closeModal(true);
 
   let amountIndex;
-  if (won) amountIndex = Math.min(state.play.index, 14);
-  else if (state.play.index >= 10) amountIndex = 9;
-  else if (state.play.index >= 5) amountIndex = 4;
-  else amountIndex = -1;
+  if (won) {
+    amountIndex = Math.min(state.play.index, 14);
+  } else {
+    amountIndex = resultIndexAfterFailure(state.play.index);
+    state.play.eliminated = true;
+    state.play.eliminatedQuestionIndex = state.play.index;
+    state.play.officialResultIndex = amountIndex;
+  }
 
   const card = document.querySelector('.result-card');
   const screen = document.querySelector('.result-screen');
@@ -1783,19 +1846,89 @@ function finishGame(won) {
   }
 
   const playerName = state.play.name && state.play.name !== 'Kandidat/in' ? state.play.name : '';
-  $('#result-kicker').textContent = won ? (finalWinner ? '🏆 MILLIONÄR! 🏆' : '🏆 GESCHAFFT! 🏆') : 'Spiel beendet';
+  const canContinue = !won && canContinueAfterElimination();
+
+  $('#result-kicker').textContent = won
+    ? (finalWinner ? '🏆 MILLIONÄR! 🏆' : '🏆 GESCHAFFT! 🏆')
+    : 'Ausgeschieden';
   $('#result-money').textContent = amountIndex >= 0 ? money[amountIndex] : '0 €';
-  $('#result-copy').textContent = state.play.mode === 'student'
-    ? (won ? `${playerName ? playerName + ', du' : 'Du'} hast das Spiel erfolgreich beendet!` : 'Danke fürs Mitspielen.')
-    : (won ? `${playerName ? playerName + ' hat' : 'Der Kandidat oder die Kandidatin hat'} es geschafft!` : 'Die sichere Gewinnstufe.');
-  const studentResult = state.play.mode === 'student';
-  $('#result-primary').textContent = studentResult ? 'Zur Startseite' : 'Zurück zum Lehrermodus';
-  $('#result-secondary')?.classList.toggle('hidden', studentResult);
+
+  if (won) {
+    $('#result-copy').textContent = state.play.mode === 'student'
+      ? `${playerName ? playerName + ', du' : 'Du'} hast das Spiel erfolgreich beendet!`
+      : `${playerName ? playerName + ' hat' : 'Der Kandidat oder die Kandidatin hat'} es geschafft!`;
+  } else if (canContinue) {
+    $('#result-copy').textContent = 'Dein Resultat steht fest. Du kannst die restlichen Fragen trotzdem weiterspielen.';
+  } else {
+    $('#result-copy').textContent = 'Dein erzieltes Resultat.';
+  }
+
+  if (canContinue) {
+    $('#result-primary').textContent = 'Trotzdem weiterspielen';
+    $('#result-secondary').textContent = 'Zur Startseite';
+    $('#result-secondary')?.classList.remove('hidden');
+  } else {
+    const studentResult = state.play.mode === 'student';
+    $('#result-primary').textContent = studentResult ? 'Zur Startseite' : 'Zurück zum Lehrermodus';
+    $('#result-secondary')?.classList.toggle('hidden', studentResult);
+  }
+
   showScreen('result');
   if (won) playCue('outro');
 }
 
+function finishPracticeGame() {
+  if (!state.play || state.play.finished) return;
+  state.play.finished = true;
+  stopAll();
+  stopHeartbeat();
+  closeModal(true);
+
+  const card = document.querySelector('.result-card');
+  const screen = document.querySelector('.result-screen');
+  card?.classList.remove('winner', 'million-winner');
+  card?.classList.add('lost');
+  screen?.classList.remove('winner-screen');
+  document.querySelector('.winner-confetti')?.remove();
+
+  const amount = officialResultAmount();
+  $('#result-kicker').textContent = 'Spiel beendet';
+  $('#result-money').textContent = amount;
+  $('#result-copy').textContent = `Dein erzieltes Resultat bleibt ${amount}. Du hast die restlichen Fragen trotzdem weitergespielt.`;
+
+  const studentResult = state.play.mode === 'student';
+  $('#result-primary').textContent = studentResult ? 'Zur Startseite' : 'Zurück zum Lehrermodus';
+  $('#result-secondary')?.classList.toggle('hidden', studentResult);
+  showScreen('result');
+}
+
+async function continueAfterElimination() {
+  if (!canContinueAfterElimination()) return;
+
+  let nextIndex = state.play.index + 1;
+
+  if (state.play.mode === 'student') {
+    const result = await studentContinuePractice();
+    nextIndex = Number(result.nextQuestionIndex);
+  }
+
+  state.play.practiceMode = true;
+  state.play.finished = false;
+  state.play.selected = null;
+  state.play.locked = false;
+  state.play.index = nextIndex;
+  state.lastAnswerResult = null;
+
+  $('#game-mode-badge').textContent = 'Trotzdem weiterspielen';
+  showScreen('game');
+
+  if (state.play.mode === 'student') startHeartbeat();
+  await renderCurrentQuestion();
+}
+
 async function resultPrimary() {
+  if (canContinueAfterElimination()) return continueAfterElimination();
+
   const mode = state.play?.mode;
   if (mode === 'student') {
     clearStudentSession();
@@ -1806,6 +1939,12 @@ async function resultPrimary() {
   return openTeacherHome();
 }
 
+async function resultSecondary() {
+  const mode = state.play?.mode;
+  if (mode === 'student') clearStudentSession();
+  state.play = null;
+  return backToMode();
+}
 async function quitCurrentGame() {
   if (!state.play) return backToMode();
   if (!confirm('Spiel wirklich beenden?')) return;
