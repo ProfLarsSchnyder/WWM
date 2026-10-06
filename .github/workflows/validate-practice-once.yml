@@ -1,0 +1,24 @@
+name: Validate practice flow once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-practice-once.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript
+        run: |
+          node --check js/app-core-v3.js
+          node --check js/backend-v3.js
+          node --check js/app-v3.js
+          node --check js/access-ui-v4.js
+      - name: Verify practice hooks
+        run: |
+          grep -q "Trotzdem weiterspielen" js/app-core-v3.js
+          grep -q "studentContinuePractice" js/backend-v3.js
+          grep -q 'data-action="result-secondary"' index.html
