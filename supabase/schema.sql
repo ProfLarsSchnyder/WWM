@@ -78,6 +78,10 @@ create index if not exists idx_wwm_participants_session on public.wwm_participan
 create index if not exists idx_wwm_participants_last_seen on public.wwm_participants(last_seen desc);
 create index if not exists idx_wwm_answers_session_question on public.wwm_participant_answers(session_id, question_index);
 
+alter table public.wwm_participants add column if not exists practice_mode boolean not null default false;
+alter table public.wwm_participants add column if not exists eliminated_question_index integer null;
+alter table public.wwm_participants add column if not exists practice_finished_at timestamptz null;
+
 alter table public.wwm_app_settings enable row level security;
 alter table public.wwm_quiz_games enable row level security;
 alter table public.wwm_teacher_sessions enable row level security;
@@ -466,12 +470,57 @@ begin
   return jsonb_build_object(
     'participantId',p.id,'sessionId',p.session_id,'gameId',p.game_id,'title',g.title,
     'studentName',p.student_name,'className',p.class_name,'status',p.status,
+    'practiceMode',p.practice_mode,'eliminatedQuestionIndex',p.eliminated_question_index,
     'currentQuestionIndex',p.current_question_index,'lastAnsweredIndex',p.last_answered_index,
     'correctCount',p.correct_count,'jokersUsed',p.jokers_used,'questionCount',jsonb_array_length(g.questions)
   );
 end;
 $$;
 
+create or replace function public.wwm_student_continue_practice(p_participant_id uuid, p_token text)
+returns jsonb language plpgsql security definer
+set search_path = public, extensions
+as $$
+declare p public.wwm_participants; qs jsonb; totalq integer; next_index integer;
+begin
+  perform public.wwm_assert_participant(p_participant_id,p_token);
+  select * into p from public.wwm_participants where id=p_participant_id;
+
+  if p.status <> 'eliminated' then
+    raise exception 'Trotzdem weiterspielen ist nur nach dem Ausscheiden möglich';
+  end if;
+
+  if p.practice_mode then
+    return jsonb_build_object(
+      'practiceMode',true,
+      'nextQuestionIndex',p.current_question_index,
+      'eliminatedQuestionIndex',p.eliminated_question_index
+    );
+  end if;
+
+  select questions into qs from public.wwm_quiz_games where id=p.game_id;
+  totalq := jsonb_array_length(qs);
+
+  if p.last_answered_index >= totalq - 1 then
+    raise exception 'Es gibt keine weiteren Fragen';
+  end if;
+
+  next_index := p.last_answered_index + 1;
+
+  update public.wwm_participants set
+    practice_mode=true,
+    current_question_index=next_index,
+    practice_finished_at=null,
+    last_seen=now()
+  where id=p_participant_id;
+
+  return jsonb_build_object(
+    'practiceMode',true,
+    'nextQuestionIndex',next_index,
+    'eliminatedQuestionIndex',p.eliminated_question_index
+  );
+end;
+$$;
 create or replace function public.wwm_student_get_question(p_participant_id uuid, p_token text, p_question_index integer)
 returns jsonb language plpgsql security definer
 set search_path = public, extensions
@@ -480,7 +529,9 @@ declare p public.wwm_participants; qs jsonb; q jsonb; answers jsonb;
 begin
   perform public.wwm_assert_participant(p_participant_id,p_token);
   select * into p from public.wwm_participants where id=p_participant_id;
-  if p.status<>'active' then raise exception 'Dieses Spiel ist bereits beendet'; end if;
+  if p.status <> 'active' and not (p.status='eliminated' and p.practice_mode) then
+    raise exception 'Dieses Spiel ist bereits beendet';
+  end if;
   if p_question_index<>p.current_question_index then raise exception 'Diese Frage ist momentan nicht freigeschaltet'; end if;
   select questions into qs from public.wwm_quiz_games where id=p.game_id;
   if p_question_index<0 or p_question_index>=jsonb_array_length(qs) then raise exception 'Frage existiert nicht'; end if;
@@ -488,10 +539,9 @@ begin
   select jsonb_agg(jsonb_build_object('key',m.answer_key,'text',m.answer_text) order by m.answer_key) into answers
   from public.wwm_answer_key_map(p_participant_id,p_question_index,q) m;
   update public.wwm_participants set last_seen=now() where id=p_participant_id;
-  return jsonb_build_object('index',p_question_index,'id',coalesce(q->>'id',p_question_index::text),'question',q->>'question','answers',answers);
+  return jsonb_build_object('index',p_question_index,'id',coalesce(q->>'id',p_question_index::text),'question',q->>'question','answers',answers,'practiceMode',p.practice_mode);
 end;
 $$;
-
 create or replace function public.wwm_student_submit_answer(
   p_participant_id uuid,p_token text,p_question_index integer,p_selected_key text,p_response_ms integer default null
 )
@@ -501,14 +551,18 @@ as $$
 declare
   p public.wwm_participants; old public.wwm_participant_answers; qs jsonb; q jsonb; totalq integer;
   skey text; stext text; scorrect boolean; ckey text; ctext text; next_status text; next_index integer;
+  is_practice boolean;
 begin
   perform public.wwm_assert_participant(p_participant_id,p_token);
   skey:=upper(btrim(coalesce(p_selected_key,'')));
   if skey not in ('A','B','C','D') then raise exception 'Ungültige Antwort'; end if;
   select * into p from public.wwm_participants where id=p_participant_id;
+  is_practice := p.status='eliminated' and p.practice_mode;
+  if p.status<>'active' and not is_practice then raise exception 'Dieses Spiel ist bereits beendet'; end if;
   select questions into qs from public.wwm_quiz_games where id=p.game_id;
   totalq:=jsonb_array_length(qs);
   if p_question_index<0 or p_question_index>=totalq then raise exception 'Frage existiert nicht'; end if;
+  if p_question_index<>p.current_question_index then raise exception 'Diese Frage ist momentan nicht freigeschaltet'; end if;
   q:=qs->p_question_index;
   select answer_key,answer_text into ckey,ctext
   from public.wwm_answer_key_map(p_participant_id,p_question_index,q) where is_correct=true;
@@ -516,11 +570,9 @@ begin
   select * into old from public.wwm_participant_answers
   where participant_id=p_participant_id and question_index=p_question_index;
   if old.id is not null then
-    return jsonb_build_object('correct',old.is_correct,'selectedKey',old.selected_key,'correctKey',ckey,'correctText',ctext,'status',p.status,'nextQuestionIndex',p.current_question_index);
+    return jsonb_build_object('correct',old.is_correct,'selectedKey',old.selected_key,'correctKey',ckey,'correctText',ctext,'status',case when is_practice then 'practice' else p.status end,'nextQuestionIndex',p.current_question_index);
   end if;
 
-  if p.status<>'active' then raise exception 'Dieses Spiel ist bereits beendet'; end if;
-  if p_question_index<>p.current_question_index then raise exception 'Diese Frage ist momentan nicht freigeschaltet'; end if;
   select answer_text,is_correct into stext,scorrect
   from public.wwm_answer_key_map(p_participant_id,p_question_index,q) where answer_key=skey;
   if stext is null then raise exception 'Antwort existiert nicht'; end if;
@@ -528,7 +580,15 @@ begin
   insert into public.wwm_participant_answers(participant_id,session_id,game_id,question_index,selected_key,selected_text,is_correct,response_ms)
   values(p_participant_id,p.session_id,p.game_id,p_question_index,skey,stext,scorrect,case when p_response_ms>=0 then p_response_ms else null end);
 
-  if scorrect then
+  if is_practice then
+    if p_question_index>=totalq-1 then
+      update public.wwm_participants set practice_mode=false,practice_finished_at=now(),last_answered_index=p_question_index,last_seen=now() where id=p_participant_id;
+      next_status:='practice_completed'; next_index:=p_question_index;
+    else
+      update public.wwm_participants set current_question_index=p_question_index+1,last_answered_index=p_question_index,last_seen=now() where id=p_participant_id;
+      next_status:='practice'; next_index:=p_question_index+1;
+    end if;
+  elsif scorrect then
     if p_question_index>=totalq-1 then
       update public.wwm_participants set status='completed',last_answered_index=p_question_index,correct_count=correct_count+1,last_seen=now(),finished_at=now() where id=p_participant_id;
       next_status:='completed'; next_index:=p_question_index;
@@ -537,14 +597,13 @@ begin
       next_status:='active'; next_index:=p_question_index+1;
     end if;
   else
-    update public.wwm_participants set status='eliminated',last_answered_index=p_question_index,last_seen=now(),finished_at=now() where id=p_participant_id;
+    update public.wwm_participants set status='eliminated',eliminated_question_index=p_question_index,practice_mode=false,last_answered_index=p_question_index,last_seen=now(),finished_at=now() where id=p_participant_id;
     next_status:='eliminated'; next_index:=p_question_index;
   end if;
 
-  return jsonb_build_object('correct',scorrect,'selectedKey',skey,'correctKey',ckey,'correctText',ctext,'status',next_status,'nextQuestionIndex',next_index);
+  return jsonb_build_object('correct',scorrect,'selectedKey',skey,'correctKey',ckey,'correctText',ctext,'status',next_status,'nextQuestionIndex',next_index,'practiceMode',is_practice);
 end;
 $$;
-
 create or replace function public.wwm_student_use_joker(p_participant_id uuid,p_token text,p_joker_type text)
 returns jsonb language plpgsql security definer
 set search_path = public, extensions
@@ -558,7 +617,7 @@ begin
   typ:=lower(btrim(coalesce(p_joker_type,'')));
   if typ not in ('fifty','audience','phone','teacher') then raise exception 'Unbekannter Joker'; end if;
   select * into p from public.wwm_participants where id=p_participant_id;
-  if p.status<>'active' then raise exception 'Spiel ist bereits beendet'; end if;
+  if p.status<>'active' and not (p.status='eliminated' and p.practice_mode) then raise exception 'Spiel ist bereits beendet'; end if;
   if coalesce((p.jokers_used->>typ)::boolean,false) then
     result:=p.joker_results->typ;
     if result is not null then return result; end if;
@@ -629,17 +688,20 @@ create or replace function public.wwm_student_quit(p_participant_id uuid,p_token
 returns boolean language plpgsql security definer
 set search_path = public, extensions
 as $$
+declare p public.wwm_participants;
 begin
   perform public.wwm_assert_participant(p_participant_id,p_token);
-  update public.wwm_participants set
-    status=case when status='active' then 'quit' else status end,
-    finished_at=case when status='active' then now() else finished_at end,
-    last_seen=now()
-  where id=p_participant_id;
+  select * into p from public.wwm_participants where id=p_participant_id;
+  if p.status='eliminated' and p.practice_mode then
+    update public.wwm_participants set practice_mode=false,practice_finished_at=now(),last_seen=now() where id=p_participant_id;
+  elsif p.status='active' then
+    update public.wwm_participants set status='quit',finished_at=now(),last_seen=now() where id=p_participant_id;
+  else
+    update public.wwm_participants set last_seen=now() where id=p_participant_id;
+  end if;
   return true;
 end;
 $$;
-
 -- ============================================================
 -- RECHTE
 -- ============================================================
@@ -664,6 +726,7 @@ revoke all on function public.wwm_teacher_session_history(text) from public;
 revoke all on function public.wwm_student_preview(text) from public;
 revoke all on function public.wwm_student_join(text,text,text) from public;
 revoke all on function public.wwm_student_resume(uuid,text) from public;
+revoke all on function public.wwm_student_continue_practice(uuid,text) from public;
 revoke all on function public.wwm_student_get_question(uuid,text,integer) from public;
 revoke all on function public.wwm_student_submit_answer(uuid,text,integer,text,integer) from public;
 revoke all on function public.wwm_student_use_joker(uuid,text,text) from public;
@@ -683,6 +746,7 @@ grant execute on function public.wwm_teacher_session_history(text) to anon,authe
 grant execute on function public.wwm_student_preview(text) to anon,authenticated;
 grant execute on function public.wwm_student_join(text,text,text) to anon,authenticated;
 grant execute on function public.wwm_student_resume(uuid,text) to anon,authenticated;
+grant execute on function public.wwm_student_continue_practice(uuid,text) to anon,authenticated;
 grant execute on function public.wwm_student_get_question(uuid,text,integer) to anon,authenticated;
 grant execute on function public.wwm_student_submit_answer(uuid,text,integer,text,integer) to anon,authenticated;
 grant execute on function public.wwm_student_use_joker(uuid,text,text) to anon,authenticated;
